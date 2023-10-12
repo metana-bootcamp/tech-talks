@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+
+	<head>
+		<meta charset="utf-8">
+
+		<title>reveal.js – The HTML Presentation Framework</title>
+
+		<meta name="description" content="A framework for easily creating beautiful presentations using HTML">
+		<meta name="author" content="Hakim El Hattab">
+
+		<meta name="apple-mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+		<link rel="stylesheet" href="../../../reveal.js/dist/reset.css">
+		<link rel="stylesheet" href="../../../reveal.js/dist/reveal.css">
+		<link rel="stylesheet" href="../../../reveal.js/dist/theme/black.css" id="theme">
+
+		<!-- Theme used for syntax highlighting of code -->
+		<link rel="stylesheet" href="../../../reveal.js/plugin/highlight/monokai.css">
+	</head>
+
+	<body>
+
+		<div class="reveal">
+
+			<!-- Any section element inside of this container is displayed as a slide -->
+			<div class="slides">
+        <section data-markdown>
+          <textarea data-template>
+			## Tech Talk
+			Oct 12 '23<br/>
+			[OpenZeppelin Contracts Release V5](https://github.com/OpenZeppelin/openzeppelin-contracts/releases/tag/v5.0.0)
+			---
+			## `$WHOAMI`
+			* DeFi developer and Web3.0 Instructor.
+			* Currently,
+			  * Building $DINERO
+			  * Blockchain Instructor at York University
+			* Previously,  
+			  * CTO and lead Blockchain Developer at opty.fi
+			  * Adjunct Professor at George Brown College 
+			---
+			## New addition to V5
+			* Modern best practices and namespace storages
+			* Reduced gas consumption
+			* Simplicity in codebase
+			* Improving AccessManager
+			* Test coverage is ~99% by adding fuzzing
+			---
+			## importing OZ V5
+			```
+			# Remix
+			import "https://github.com/OpenZeppelin/openzeppelin-contracts/tree/v5.0.0/contracts"
+			# foundry
+			forge install forge install OpenZeppelin/openzeppelin-contracts@v5.0.0
+			# Add @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/ in remappings.txt.
+			# hardhat
+			npm install @openzeppelin/contracts@v5.0.0
+			```
+			---
+			## ERC20 hooks removal
+			<img src="erc20-hooks.png" width="800">
+			---
+			## Ownable
+			* Ownable now accepts a custom owner argument during construction, and Governor supports voting with bytes-formatted signatures and has Account Abstraction support by implementing ERC-1271.
+			---
+			## Removal
+			* Address.isContract
+			* Counters
+			* SafeMath
+			* SignedSafeMath
+			* GovernorCompatibilityBravo
+			* GovernorVotesComp
+			* TokenTimelock (in favor of VestingWallet)
+			* ERC777
+			* All cross-chain contracts (including AccessControlCrossChain)
+			---
+			### Namespaced Storage for better upgrades security(ERC-7201)
+			<img src="collision.png" width="500"><br/>
+			Previously, upgradeable contracts used to have a `__gap` variable in storage between inherited contracts in order to reserve space for supporting new variables added between upgrades.
+			---
+			### scoping variables by namespace
+			<img src="scoping.png" width="800">
+			---
+			## Custom Error and dynamic argument
+			<img src="custom-error.png" width="900">
+			---
+			##  AccessManager
+			* Make managing access control easier!
+			  * Connect contract to an authority for access control
+			  * Time-locked governance proposals
+			  * Auth Utils Lib
+			---
+			<img src="access-control.png" width="800">
+			---
+			## Packing variables in storage
+			<img src="packing.png" width="500">
+			---
+			## Account Abstraction 
+			* Additional ERC-2771 and ERC-1967 support
+			---
+			## Utils libraries
+			* Simplify handling nonces, ECDSA & Time
+			---
+			## Tooling update
+			* Contract library integrated to work with OZ defender
+			* Improved Upgrade plugin for hardhat, foundry in pipeline
+			---
+			## Gas optmization
+			* Use custom error instead of revert string
+			* Use immutable variable to save use of SLOAD instruction 
+			---
+			## Recommended Readings
+			* [Openzeppelin Contracts V5 Release Notes](https://github.com/OpenZeppelin/openzeppelin-contracts/releases/tag/v5.0.0)
+			* [OpenZeppelin Contract V5 blog](https://blog.openzeppelin.com/introducing-openzeppelin-contracts-5.0)
+          </textarea>
+        </section>
+
+			</div>
+
+		</div>
+
+		<script src="../../../reveal.js/dist/reveal.js"></script>
+		<script src="../../../reveal.js/plugin/zoom/zoom.js"></script>
+		<script src="../../../reveal.js/plugin/notes/notes.js"></script>
+		<script src="../../../reveal.js/plugin/search/search.js"></script>
+		<script src="../../../reveal.js/plugin/markdown/markdown.js"></script>
+		<script src="../../../reveal.js/plugin/highlight/highlight.js"></script>
+		<script>
+
+			// Also available as an ES module, see:
+			// https://revealjs.com/initialization/
+			Reveal.initialize({
+				controls: true,
+				progress: true,
+				center: true,
+				hash: true,
+        transition: 'none', // none/fade/slide/convex/concave/zoom
+
+				// Learn about plugins: https://revealjs.com/plugins/
+				plugins: [ RevealZoom, RevealNotes, RevealSearch, RevealMarkdown, RevealHighlight ]
+			});
+
+		</script>
+
+	</body>
+</html>
