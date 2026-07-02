@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Arbitrum’s Security Council Froze KelpDAO Funds — Technical Deep Dive</title>
+    
+    <!-- Reveal.js via CDN -->
+		<link rel="stylesheet" href="../../../reveal.js/dist/reset.css">
+		<link rel="stylesheet" href="../../../reveal.js/dist/reveal.css">
+		<link rel="stylesheet" href="../../../reveal.js/dist/theme/black.css" id="theme">
+    
+    <style>
+        .reveal .slides {
+            font-size: 26px;
+            line-height: 1.4;
+        }
+        .reveal pre code {
+            font-size: 0.65em;
+        }
+        .reveal code {
+            word-break: break-all;
+            overflow-wrap: break-word;
+        }
+        .reveal .slide-number {
+            font-size: 14px;
+        }
+        .highlight {
+            background-color: #2a9d8f;
+            color: white;
+            padding: 2px 10px;
+            border-radius: 4px;
+        }
+        .reveal section img {
+            max-height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+
+            <!-- Slide 1: Title -->
+            <section>
+                <h1>How Arbitrum’s Security Council<br>Froze KelpDAO Funds</h1>
+                <h3>A Technical Deep Dive</h3>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>Welcome the audience.</li>
+                        <li>Mention this is a technical deep dive based on official Arbitrum disclosures.</li>
+                        <li>Goal: Understand exactly how the funds were moved without the exploiter’s private key.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <!-- Slide 2: Agenda -->
+            <section>
+                <h2>Agenda</h2>
+                <ol>
+                    <li>Incident Background</li>
+                    <li>Arbitrum Architecture Basics</li>
+                    <li>Security Council Emergency Powers</li>
+                    <li>The Technical Mechanism (Step-by-Step)</li>
+                    <li>On-Chain Evidence</li>
+                    <li>Why It Worked</li>
+                    <li>Implications &amp; Trade-offs</li>
+                    <li>Key Takeaways</li>
+                </ol>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>Walk through the agenda quickly.</li>
+                        <li>The most important part is slides 6–10 (the actual mechanism).</li>
+                        <li>Encourage questions during the technical section.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <!-- Slide 3: Incident Background -->
+            <section>
+                <h2>The KelpDAO Incident (April 2026)</h2>
+                <ul>
+                    <li><strong>April 18, 2026</strong>: ~$292 million exploit on KelpDAO (rsETH)</li>
+                    <li>Attack used a forged LayerZero cross-chain message (1-of-1 DVN flaw)</li>
+                    <li>Large portion of stolen ETH moved to <strong>Arbitrum One</strong></li>
+                    <li><strong>April 20–21</strong>: Arbitrum Security Council executes emergency action</li>
+                    <li><strong>Result</strong>: ~30,766 ETH moved to a governance-controlled frozen wallet</li>
+                </ul>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>Give brief context — don’t spend too much time here.</li>
+                        <li>Focus is on <strong>how</strong> Arbitrum responded technically.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <!-- Slide 4: Arbitrum Architecture -->
+            <section>
+                <h2>Arbitrum Architecture Basics</h2>
+                <ul>
+                    <li>Optimistic Rollup running on Ethereum (Nitro)</li>
+                    <li>L1 → L2 messaging goes through the <span class="highlight">Delayed Inbox</span> contract on Ethereum</li>
+                    <li>Messages are executed on L2 with a specific <strong>sender context</strong></li>
+                    <li>Core contracts are upgradeable via the <strong>Upgrade Executor</strong></li>
+                </ul>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>The <strong>Delayed Inbox</strong> is the critical component we’ll focus on.</li>
+                        <li>Everything that comes from L1 to L2 passes through this contract.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <!-- Slide 5: Security Council Powers -->
+            <section>
+                <h2>Security Council Powers</h2>
+                <p style="font-size: 0.95em; margin-bottom: 30px;">
+                    <strong>Source:</strong> <a href="https://docs.arbitrum.foundation/dao-constitution" target="_blank">Arbitrum DAO Constitution</a>
+                </p>
+
+                <ul>
+                    <li>Consists of <strong>12 members</strong> (multi-sig wallet)</li>
+                    <li>Can perform <strong>Emergency Actions</strong> and <strong>Non-Emergency Actions</strong></li>
+                    <li>Both types of actions require <strong>9-of-12 approval</strong></li>
+                    <li>Powers can be modified or removed via <strong>Constitutional AIP</strong></li>
+                </ul>
+
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>This is the formal legal basis for everything the Security Council did.</li>
+                        <li>Emphasize that these powers are explicitly granted by the DAO via the Constitution.</li>
+                    </ul>
+                </aside>
+            </section>
+            
+            <section>
+                <h2>Emergency Actions (Constitution)</h2>
+                
+                <blockquote style="font-size: 0.9em; border-left: 6px solid #2a9d8f; padding-left: 20px; margin: 30px 0;">
+                    “Performing any Emergency Action requires a <strong>9-of-12 approval</strong> from the Security Council.<br><br>
+                    The Security Council must not use its power to perform Emergency Actions except in a <strong>true security emergency</strong>, such as a critical vulnerability that could significantly compromise the integrity, confidentiality, or availability of a chain governed by the ArbitrumDAO.”
+                </blockquote>
+
+                <p style="font-size: 0.85em; margin-top: 20px;">
+                    <strong>Source:</strong> <a href="https://docs.arbitrum.foundation/dao-constitution" target="_blank">https://docs.arbitrum.foundation/dao-constitution</a> (Section 3)
+                </p>
+
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>Read the quote slowly.</li>
+                        <li>Highlight that the action must be a <strong>true security emergency</strong>.</li>
+                        <li>After any emergency action, the Council is required to publish a transparency report.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <section>
+                <h2>How Emergency Actions Work</h2>
+                
+                <ul>
+                    <li><strong>9-of-12 multisig approval</strong> required</li>
+                    <li>Can execute <strong>immediately with no delay</strong> (bypasses normal timelock)</li>
+                    <li>Typically used for urgent security responses (e.g., protocol upgrades)</li>
+                    <li>After execution → <strong>Full transparency report</strong> must be published</li>
+                    <li>DAO can later restrict or remove this power via Constitutional AIP</li>
+                </ul>
+
+                <p style="margin-top: 30px; font-size: 0.85em;">
+                    <strong>Source:</strong> <a href="https://docs.arbitrum.foundation/dao-constitution" target="_blank">Arbitrum DAO Constitution - Section 3</a>
+                </p>
+
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>This is exactly what enabled the temporary Inbox upgrade we discussed.</li>
+                        <li>The “no delay” part is critical — this is why they could act so quickly.</li>
+                    </ul>
+                </aside>
+            </section>
+            <!-- Slide 6: Mechanism Overview -->
+            <section>
+                <h2>The Freeze Mechanism — High Level</h2>
+                <p style="text-align: center; font-size: 1.3em; margin: 50px 0;">
+                    <strong>Atomic temporary upgrade</strong> of the L1 Delayed Inbox<br>
+                    to impersonate the exploiter and move funds
+                </p>
+                <div style="display: flex; justify-content: center; gap: 60px; margin-top: 40px;">
+                    <div><strong>1.</strong> Upgrade Inbox</div>
+                    <div><strong>2.</strong> Impersonate &amp; Transfer</div>
+                    <div><strong>3.</strong> Revert Upgrade</div>
+                </div>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>This is the core idea of the talk.</li>
+                        <li>Emphasize that the entire operation was <strong>atomic</strong>.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <!-- Slide 7: Step 1 -->
+            <section>
+                <h2>Step 1: Temporary Upgrade of Delayed Inbox</h2>
+                <ul>
+                    <li>Security Council triggers <a href="https://etherscan.io/tx/0x079984c56c5670108f5c6f664904178f9b364340351949a42e4637d1f645f770" target="_blank">upgrade</a> via the <strong>L1 Upgrade Executor</strong></li>
+                    <li>Upgrades the <strong>Delayed Inbox</strong> contract on Ethereum</li>
+                    <li>Adds new function: <a href="https://etherscan.io/address/0x980D1F93FC5809c828539c46084801673FA6A859#code" target="_blank" ><code>sendUnsignedTransactionOverride</code></a></li>
+                    <li>This function allows creating L1→L2 messages while <strong>impersonating any address</strong></li>
+                </ul>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>They only added one temporary function.</li>
+                        <li>The upgrade used the emergency (no-delay) path.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <!-- Slide 8: Step 2 -->
+            <section>
+                <h2>Step 2: Impersonated Cross-Chain Transfer</h2>
+                <ul>
+                    <li>Used the new override function to create an L1→L2 message</li>
+                    <li>Message was built to <strong>impersonate the exploiter’s address</strong></li>
+                    <li>L2 executed the transaction <strong>as if it came from the exploiter</strong></li>
+                    <li>~30,766 ETH was transferred to the frozen wallet</li>
+                </ul>
+                <p style="margin-top: 30px;"><strong>Frozen Wallet:</strong> <code>0x0000000000000000000000000000000000000DA0</code></p>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>This is the clever technical trick.</li>
+                        <li>They didn’t need the exploiter’s private key.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <!-- Slide 9: Step 3 -->
+            <section>
+                <h2>Step 3: Atomic Reversion</h2>
+                <ul>
+                    <li>Immediately after the transfer, the Inbox was upgraded back to its original code</li>
+                    <li>The temporary <code>sendUnsignedTransactionOverride</code> function was removed</li>
+                    <li>Operation was fully <strong>atomic</strong> — no permanent protocol changes</li>
+                    <li>Only the fund movement remained on-chain</li>
+                </ul>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>They cleaned up after themselves responsibly.</li>
+                        <li>No backdoor was left in the protocol.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <!-- Slide 10: On-Chain Evidence -->
+            <section>
+                <h2>On-Chain Evidence</h2>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px;">
+                    <div>
+                        <strong>Ethereum L1 Tx</strong><br>
+                        (Upgrade + Impersonation)<br><br>
+                        <code style="font-size: 0.65em;">0x079984c56c5670108f5c6f664904178f9b364340351949a42e4637d1f645f770</code><br><br>
+                        <a href="https://etherscan.io/tx/0x079984c56c5670108f5c6f664904178f9b364340351949a42e4637d1f645f770" target="_blank">View on Etherscan →</a>
+                    </div>
+                    <div>
+                        <strong>Arbitrum One Tx</strong><br>
+                        (Fund Transfer)<br><br>
+                        <code style="font-size: 0.65em;">0x5618044241dade84af6c41b7d84496dc9823700f98b79751e257608dac570f6b</code><br><br>
+                        <a href="https://arbiscan.io/tx/0x5618044241dade84af6c41b7d84496dc9823700f98b79751e257608dac570f6b" target="_blank">View on Arbiscan →</a>
+                    </div>
+                </div>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>Show the transactions if possible during the presentation.</li>
+                        <li>The L2 transaction clearly shows the transfer from the exploiter to the frozen wallet.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <!-- Slide 11: Why It Worked -->
+            <section>
+                <h2>Why This Technique Worked</h2>
+                <ul>
+                    <li>The <strong>Delayed Inbox</strong> is the trusted entry point for all L1→L2 messages</li>
+                    <li>Temporary control of the Inbox allowed spoofing the sender address</li>
+                    <li>L2 processed the transaction with the <strong>exploiter’s sender context</strong></li>
+                    <li>Native ETH could be moved because it appeared as a legitimate transaction from that address</li>
+                    <li>Atomic upgrade-revert pattern left no permanent changes</li>
+                </ul>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>This is the key technical explanation.</li>
+                        <li>They used the bridge’s trust model rather than breaking cryptography.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <!-- Slide 12: Implications -->
+            <section>
+                <h2>Implications &amp; Trade-offs</h2>
+                <div style="display: flex; gap: 50px; margin-top: 20px;">
+                    <div style="flex: 1;">
+                        <h4 style="color: #2a9d8f;">Strengths</h4>
+                        <ul>
+                            <li>Fast and targeted recovery</li>
+                            <li>Minimal disruption to users</li>
+                            <li>Fully transparent and documented</li>
+                            <li>Final release requires DAO governance</li>
+                        </ul>
+                    </div>
+                    <div style="flex: 1;">
+                        <h4 style="color: #e76f51;">Trade-offs</h4>
+                        <ul>
+                            <li>Reveals centralization in current L2s</li>
+                            <li>Depends on honest Security Council</li>
+                            <li>Sets precedent for future interventions</li>
+                            <li>Stage 1 rollup limitations exposed</li>
+                        </ul>
+                    </div>
+                </div>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>Be balanced in your explanation.</li>
+                        <li>This is the current reality of most L2s.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <!-- Slide 13: Key Takeaways -->
+            <section>
+                <h2>Key Takeaways</h2>
+                <ol>
+                    <li>Security Council used a <strong>temporary upgrade</strong> of the L1 Inbox</li>
+                    <li>They added an impersonation function to execute a transaction <strong>as the exploiter</strong></li>
+                    <li>The entire operation was <strong>atomic</strong> (upgrade → transfer → revert)</li>
+                    <li>No permanent backdoor was left in the protocol</li>
+                    <li>Final movement of funds still requires <strong>DAO governance approval</strong></li>
+                </ol>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>Summarize the main points clearly.</li>
+                        <li>End on a strong note about responsible use of emergency powers.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <!-- Slide 14: Sources -->
+            <section>
+                <h2>Sources</h2>
+                <ul>
+                    <li><strong>Official Technical Disclosure</strong><br>
+                        <a href="https://forum.arbitrum.foundation/t/security-council-emergency-action-21-04-2026/30803" target="_blank">Arbitrum Forum Post</a></li>
+                    <li><strong>Arbitrum Announcement</strong><br>
+                        <a href="https://x.com/arbitrum/status/2046435443680346189" target="_blank">X Post</a></li>
+                    <li><strong>L1 Transaction</strong>: <code>0x079984c56c5670108f5c6f664904178f9b364340351949a42e4637d1f645f770</code></li>
+                    <li><strong>L2 Transaction</strong>: <code>0x5618044241dade84af6c41b7d84496dc9823700f98b79751e257608dac570f6b</code></li>
+                    <li><strong>KelpDAO Incident Full Report</strong>: https://layerzero.network/publications/kelpdao-incident-report.pdf</li>
+                </ul>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>Recommend reading the official forum post — it’s very well documented.</li>
+                        <li>All information is public and on-chain verifiable.</li>
+                    </ul>
+                </aside>
+            </section>
+
+            <!-- Slide 15: Q&A -->
+            <section>
+                <h1>Questions?</h1>
+                <p style="margin-top: 80px;">Thank you!</p>
+                <aside class="notes">
+                    <p><strong>Speaker Notes:</strong></p>
+                    <ul>
+                        <li>Open the floor for questions.</li>
+                        <li>Be ready for questions about decentralization vs emergency powers.</li>
+                    </ul>
+                </aside>
+            </section>
+
+        </div>
+    </div>
+
+    <script src="../../../reveal.js/dist/reveal.js"></script>
+		<script src="../../../reveal.js/plugin/zoom/zoom.js"></script>
+		<script src="../../../reveal.js/plugin/notes/notes.js"></script>
+		<script src="../../../reveal.js/plugin/search/search.js"></script>
+		<script src="../../../reveal.js/plugin/markdown/markdown.js"></script>
+		<script src="../../../reveal.js/plugin/highlight/highlight.js"></script>
+		<script>
+
+			// Also available as an ES module, see:
+			// https://revealjs.com/initialization/
+			Reveal.initialize({
+				controls: true,
+				progress: true,
+				center: true,
+				hash: true,
+        transition: 'none', // none/fade/slide/convex/concave/zoom
+
+				// Learn about plugins: https://revealjs.com/plugins/
+				plugins: [ RevealZoom, RevealNotes, RevealSearch, RevealMarkdown, RevealHighlight ]
+			});
+    </script>
+</body>
+</html>
