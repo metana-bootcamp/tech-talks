@@ -12,34 +12,29 @@
     <link rel="stylesheet" href="../../reveal.js/plugin/highlight/monokai.css" />
 
     <style>
-      .reveal h1, .reveal h2, .reveal h3 { text-transform: none; }
-      .reveal pre { box-shadow: none; font-size: 0.58em; }
+      .reveal h1 { font-size: 1.9em; text-transform: none; }
+      .reveal h2 { font-size: 1.35em; text-transform: none; }
+      .reveal h3 { font-size: 1.1em; text-transform: none; }
+      .reveal p, .reveal li { font-size: 0.82em; }
+      .reveal pre { box-shadow: none; font-size: 0.46em; margin: 0.35em 0; }
       .reveal code { font-family: 'Fira Code', 'JetBrains Mono', ui-monospace, monospace; }
+      .reveal table { font-size: 0.65em; margin: 0.4em auto; }
+      .reveal th, .reveal td { padding: 0.28em 0.5em; }
+      .reveal ul, .reveal ol { margin: 0.35em 0; }
       .diagram {
         font-family: 'Fira Code', 'JetBrains Mono', monospace;
-        font-size: 0.62em;
-        line-height: 1.35;
+        font-size: 0.46em;
+        line-height: 1.28;
         background: #141414;
-        padding: 16px 20px;
-        border-radius: 10px;
+        padding: 10px 14px;
+        border-radius: 8px;
         border: 1px solid #2a2a2a;
         display: inline-block;
         text-align: left;
         white-space: pre;
       }
-      .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; text-align: left; }
-      .card {
-        background: #161616;
-        border: 1px solid #2e2e2e;
-        border-radius: 10px;
-        padding: 16px 18px;
-        font-size: 0.85em;
-      }
-      .label { color: #4ade80; font-weight: 600; }
-      .muted { opacity: 0.55; }
       .highlight { color: #4ade80; }
-      table { font-size: 0.78em; }
-      .small { font-size: 0.75em; }
+      .muted { opacity: 0.55; }
     </style>
   </head>
   <body>
@@ -53,158 +48,174 @@
 ### Technical Deep Dive
 
 **Internet-Native Payments Protocol**  
-July 2026
-
-*Focus: Protocol mechanics, message formats, schemes, verification & settlement*
+Metana Bootcamp · July 2026
 
 Note:
-This is a technical session. Students should leave understanding the wire format, the roles of the three parties (Client, Resource Server, Facilitator), and how schemes actually move money. Keep energy high but go deep.
+Welcome everyone. Today we are going deep on x402 — the protocol that finally gives HTTP a native way to move money.
+
+By the end of this session you should be able to explain the full request lifecycle, the three roles involved, why an agent cannot simply ignore a 402, and how a site tells the difference between a human browser and an AI crawler.
+
+Open your notes app. We will move at a technical pace.
 
 ---
 
-## Agenda
+## What you will be able to answer
 
-1. Why HTTP needed a payment layer
-2. Protocol participants & high-level flow
-3. The three headers (wire format)
-4. PaymentRequirement & PaymentPayload
-5. Schemes in depth (`exact`, `upto`, `batch-settlement`)
-6. Facilitator: `/verify` + `/settle`
-7. Networks & CAIP-2
-8. Signing model (EVM focus)
-9. Security properties & threat model
-10. Implementation patterns
-11. Open questions & resources
+- What problem does x402 actually solve?
+- What are the three roles and what does each one do?
+- What exactly travels in the three HTTP headers?
+- How do the payment schemes differ?
+- Why can’t an agent just bypass the paywall?
+- What happens when a normal human opens the same URL in Chrome?
+- How does a website know the request came from an agent?
 
 Note:
-Tell them we will move fast on motivation and spend most time on the actual protocol.
+These are the questions I want you to be able to answer confidently after today. If any of them still feel fuzzy at the end, stop me.
 
 ---
 
-## The gap x402 fills
+## The gap HTTP left open
 
-HTTP has always been able to move **information**.  
-It had no first-class way to move **value**.
+HTTP was designed to move **information**.  
+It had no first-class primitive to move **value**.
 
-`402 Payment Required` was reserved in the original HTTP specs  
-and sat unused for ~30 years.
+In the early specs they reserved status code **402 Payment Required**.  
+Then almost nobody standardized it for roughly thirty years.
 
-x402 is the first widely adopted attempt to turn that status code  
-into a real, extensible payment negotiation protocol.
+Everything we use today — API keys, subscriptions, Stripe checkouts, rate-limit dashboards — is a workaround for that missing piece.
 
 Note:
-Keep this short. One minute max. Then dive in.
+This is the historical context. Spend about one minute here. The key sentence is: “HTTP could move information but not value.” Everything else in the talk is the attempt to fix that.
 
 ---
 
-## Three roles
+## What x402 actually is
 
-| Role | Responsibility |
-|------|----------------|
-| **Client** | Requests resource, selects a requirement, creates + signs PaymentPayload |
-| **Resource Server** | Protects routes, returns 402 + requirements, decides when to fulfill |
-| **Facilitator** | Verifies signatures, submits on-chain settlement, returns proof |
+x402 is an open protocol that turns the old 402 status code into a real, programmable payment negotiation layer.
 
-The protocol is deliberately designed so the Resource Server  
-**does not need** to talk to a blockchain node directly.
+A client requests a resource.  
+If payment is required, the server answers with 402 and machine-readable payment instructions.  
+The client pays, proves it, and retries.  
+Only then does the server release the content.
+
+No accounts. No API keys. No sessions. Just HTTP + cryptographic proof of payment.
 
 Note:
-Draw the three boxes on a whiteboard if possible. Students often confuse "server" with "facilitator".
+Say this slowly. This is the one-sentence definition students should remember: “402 plus machine-readable payment instructions plus cryptographic proof.”
 
 ---
 
-## Full protocol flow (12 steps)
+## The three roles
+
+| Role | What it does |
+|------|--------------|
+| **Client** | Asks for the resource, chooses a payment option, signs the payload |
+| **Resource Server** | Protects the route, issues the 402, decides when to release content |
+| **Facilitator** | Checks the signature and settles the payment on-chain |
+
+The Resource Server does **not** have to run its own blockchain node. That is the point of the Facilitator.
+
+Note:
+Draw three boxes on the board if you can. Label them Client, Resource Server, Facilitator. Students very often mix up the Resource Server and the Facilitator. Clarify that the Facilitator is optional infrastructure that handles the blockchain parts.
+
+---
+
+## Full lifecycle — first half
 
 ```text
-Client                Resource Server              Facilitator
-  │                         │                           │
-  │ 1. GET /resource        │                           │
-  │────────────────────────>│                           │
-  │                         │                           │
-  │ 2. 402 + PAYMENT-REQUIRED                           │
-  │<────────────────────────│                           │
-  │                         │                           │
-  │ 3. Select requirement   │                           │
-  │ 4. Build + sign payload │                           │
-  │                         │                           │
-  │ 5. GET /resource        │                           │
-  │    + PAYMENT-SIGNATURE  │                           │
-  │────────────────────────>│                           │
-  │                         │ 6. POST /verify           │
-  │                         │──────────────────────────>│
-  │                         │ 7. VerificationResponse   │
-  │                         │<──────────────────────────│
-  │                         │                           │
-  │                         │ 8. POST /settle           │
-  │                         │──────────────────────────>│
-  │                         │ 9. on-chain tx            │
-  │                         │              ────────────>│ chain
-  │                         │ 10. PaymentExecutionResp  │
-  │                         │<──────────────────────────│
-  │                         │                           │
-  │ 11. 200 + resource      │                           │
-  │     + PAYMENT-RESPONSE  │                           │
-  │<────────────────────────│                           │
+Client                     Resource Server
+  │                              │
+  │ 1. GET /resource             │
+  │─────────────────────────────>│
+  │                              │
+  │ 2. 402 + PAYMENT-REQUIRED    │
+  │<─────────────────────────────│
+  │                              │
+  │ 3. Choose one option         │
+  │ 4. Build + sign payload      │
+  │                              │
+  │ 5. GET /resource again       │
+  │    + PAYMENT-SIGNATURE       │
+  │─────────────────────────────>│
 ```
 
 Note:
-This is the most important diagram. Walk through it slowly. Emphasize that steps 6-10 can be short-circuited if the server self-facilitates.
+Walk through this left to right. Emphasize that after step 2 the client has received almost no useful content — only the payment challenge. The real work starts when the client comes back with a signature.
+
+---
+
+## Full lifecycle — second half
+
+```text
+Resource Server                  Facilitator
+      │                               │
+      │ 6. POST /verify               │
+      │──────────────────────────────>│
+      │ 7. “yes, signature is valid”  │
+      │<──────────────────────────────│
+      │                               │
+      │ 8. POST /settle               │
+      │──────────────────────────────>│
+      │ 9. transaction on-chain       │
+      │                    ──────────>│ chain
+      │ 10. settlement proof          │
+      │<──────────────────────────────│
+      │                               │
+Client│                               │
+  │ 11. 200 + actual content          │
+  │     + PAYMENT-RESPONSE            │
+  │<──────│
+```
+
+Note:
+This is the enforcement point. Notice that the content only appears in step 11 — after verification and settlement. Steps 6 through 10 can be short-circuited if the Resource Server decides to talk to the chain itself. That is called self-facilitation.
 
 ---
 
 ## The three headers
 
-All values are **Base64-encoded JSON**.
+Everything important travels in three headers. All values are Base64-encoded JSON.
 
-| Header | Direction | When | Content |
-|--------|-----------|------|---------|
-| `PAYMENT-REQUIRED` | Server → Client | 402 response | `PaymentRequired` object |
-| `PAYMENT-SIGNATURE` | Client → Server | Retry request | `PaymentPayload` object |
-| `PAYMENT-RESPONSE` | Server → Client | 200 response | Settlement / execution result |
+| Header | Direction | When it appears | What it carries |
+|--------|-----------|-----------------|-----------------|
+| `PAYMENT-REQUIRED` | Server → Client | With the 402 | The payment options |
+| `PAYMENT-SIGNATURE` | Client → Server | On the retry | The signed proof |
+| `PAYMENT-RESPONSE` | Server → Client | With the 200 | Settlement receipt |
 
-Design choice: headers instead of body so existing HTTP middleware, CDNs, and proxies keep working.
+They chose headers instead of the body so that existing CDNs, proxies, and middleware keep working without changes.
 
 Note:
-Ask: "Why not put the payment info in the JSON body?"  
-Answer: Headers survive more intermediaries and keep the body free for the actual resource.
+Ask the room: “Why not put this information in the JSON body?”  
+The answer is compatibility. Headers survive more intermediaries and leave the body free for the actual resource the client asked for.
 
 ---
 
-## PaymentRequired (decoded)
+## PaymentRequired (what the server sends)
 
 ```json
 {
   "x402Version": 1,
-  "error": "Payment required",
-  "resource": {
-    "url": "https://api.example.com/weather",
-    "description": "Current weather data",
-    "mimeType": "application/json"
-  },
   "accepts": [
     {
       "scheme": "exact",
       "network": "eip155:8453",
       "maxAmountRequired": "1000",
-      "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "asset": "0x833589fC...",
       "payTo": "0xYourTreasury...",
-      "resource": "/weather",
-      "description": "Weather data",
-      "mimeType": "application/json",
-      "extra": {}
+      "description": "Weather data"
     }
   ]
 }
 ```
 
-`accepts` is an array → server can offer multiple (scheme, network, price) combinations.
+`accepts` is an array. The server can offer several combinations of scheme, network, and price. The client picks one it can fulfill.
 
 Note:
-Highlight that the client is free to choose any entry in `accepts` that it can fulfill. This is how multi-chain support works.
+Point at the `accepts` array. This is how multi-chain support works in practice. One endpoint can simultaneously accept USDC on Base and SOL on Solana.
 
 ---
 
-## PaymentPayload (client → server)
+## PaymentPayload (what the client sends back)
 
 ```json
 {
@@ -212,317 +223,329 @@ Highlight that the client is free to choose any entry in `accepts` that it can f
   "scheme": "exact",
   "network": "eip155:8453",
   "payload": {
-    // scheme-specific
     "signature": "0x...",
-    "authorization": { ... }   // e.g. EIP-3009 or Permit2 data
+    "authorization": { /* EIP-3009 or Permit2 data */ }
   },
-  "accepted": { /* the exact requirement that was chosen */ }
+  "accepted": { /* the requirement it chose */ }
 }
 ```
 
-The `payload` field is **scheme- and network-specific**.  
-The outer envelope is common.
+The outer shape is common.  
+The inner `payload` is scheme-specific and network-specific.
 
 Note:
-This separation (common envelope + scheme-specific payload) is what makes the protocol extensible.
+This separation is deliberate. New payment schemes can be added later without breaking the outer envelope that every client and server already understands.
 
 ---
 
-## Schemes — the real work
+## Schemes — the real economic logic
 
-A **scheme** defines:
-- How the client authorizes the payment
-- What the facilitator must check
-- When and how funds actually move
+A scheme answers three questions:
+- How does the client authorize the payment?
+- What must the Facilitator check?
+- When do the funds actually move?
 
-Current main schemes:
-
-| Scheme | Settlement timing | Typical use |
-|--------|-------------------|-------------|
-| `exact` | Immediate | Fixed-price API calls |
-| `upto` | Immediate (up to cap) | Metered / streaming |
-| `batch-settlement` | Deferred + batched | High-volume micro payments |
+| Scheme | When money moves | Typical use |
+|--------|------------------|-------------|
+| `exact` | Immediately | Fixed-price API call |
+| `upto` | Immediately, up to a cap | Metered or streaming usage |
+| `batch-settlement` | Later, in batches | Extremely high volume of tiny payments |
 
 Note:
-Most production traffic today is `exact`. `batch-settlement` is more advanced and EVM-focused.
+Most production traffic today uses `exact`. The other two exist for more advanced cases. We will look at each briefly.
 
 ---
 
-## Scheme: `exact`
+## Scheme: exact
 
-**Intent**: Client pays a precise amount right now.
+Client pays a precise amount right now.
 
-Typical flow on EVM (USDC):
-1. Client creates an EIP-3009 `transferWithAuthorization` or Permit2 signature
-2. Signature + amount + recipient go into the PaymentPayload
-3. Facilitator submits the authorization on-chain
-4. Funds move from client → `payTo` in one transaction
+On EVM with USDC the usual path is:
+1. Client creates an EIP-3009 `transferWithAuthorization` signature (or a Permit2 signature)
+2. That signature goes into the PaymentPayload
+3. Facilitator submits it on-chain
+4. Funds move from the client to the `payTo` address in a single transaction
 
-Key properties:
-- Atomic
-- Simple to reason about
-- Irreversible once settled
+The payment is atomic and final.
 
 Note:
-EIP-3009 is popular because it is gasless for the user (the facilitator or a relayer pays gas).
+EIP-3009 is popular because the end user does not need gas in the payment token. The Facilitator or a relayer pays the gas. That removes a lot of friction for agents.
 
 ---
 
-## Scheme: `upto`
+## Scheme: upto
 
-**Intent**: Client authorizes a maximum amount.  
-Seller can settle any amount ≤ that maximum based on actual usage.
+Client authorizes a **maximum** amount.  
+The seller can later settle any amount less than or equal to that maximum based on actual usage.
 
-Useful for:
-- Streaming responses
-- "Pay for tokens generated"
-- Long-running agent tool calls
+This fits streaming responses, pay-per-token LLM generation, or long-running agent tool calls.
 
-The authorization is still signed up-front;  
-the final settlement amount is chosen later (within the cap).
+The signature still happens up front. Only the final settled amount is chosen later.
 
 Note:
-This is closer to a temporary credit line than a classic payment.
+Think of it as a temporary credit line rather than a classic one-shot payment. Useful when you do not know the exact cost before the work is done.
 
 ---
 
-## Scheme: `batch-settlement`
+## Scheme: batch-settlement
 
-Designed for **very high volume** of tiny payments.
+Built for very high volumes of tiny payments.
 
-High-level idea:
-1. Client deposits into (or authorizes) an escrow / voucher system
-2. Many off-chain vouchers are issued for individual requests
-3. Periodically the seller redeems a batch of vouchers on-chain
+Rough idea:
+1. Client authorizes or deposits into an escrow / voucher system
+2. Many small off-chain vouchers are issued, one per request
+3. The seller periodically redeems a whole batch on-chain
 
-Reduces per-request on-chain cost dramatically.  
-More complex to implement and currently more EVM-centric.
+This dramatically lowers the per-request on-chain cost, at the price of more complexity.
 
 Note:
-Only go deep here if students are advanced. Most bootcamp students will not implement this themselves.
+Only go deeper here if the cohort is already comfortable with the first two schemes. Most students will never implement batch-settlement themselves.
 
 ---
 
-## Facilitator API
+## Facilitator endpoints
 
-Two core endpoints:
+Two core calls:
 
-### `POST /verify`
-```json
-// Request
-{
-  "paymentPayload": { ... },
-  "paymentRequirements": { ... }
-}
+**POST /verify**  
+“Is this signature valid for this requirement?”  
+Returns `{ isValid: true/false }`
 
-// Response
-{
-  "isValid": true,
-  "invalidReason": null
-}
-```
+**POST /settle**  
+“Please execute the payment on-chain.”  
+Returns the transaction hash and network.
 
-### `POST /settle`
-```json
-// Request (same shape)
-// Response
-{
-  "success": true,
-  "transaction": "0x...",
-  "networkId": "eip155:8453"
-}
-```
-
-The Resource Server can call these, or self-facilitate if it wants to talk to the chain directly.
+A Resource Server can call these, or it can self-facilitate and talk to the chain directly.
 
 Note:
-Emphasize that a good facilitator is a trust-minimized piece of infrastructure. The protocol says the facilitator must not move funds except according to the client's signed intent.
+The protocol rule is important: the Facilitator must not move funds except according to the client’s signed intent. It is meant to be trust-minimized infrastructure, not a custodian that can do whatever it wants.
 
 ---
 
-## Networks & identifiers
+## Networks and CAIP-2
 
-x402 uses **CAIP-2** for network identification:
+x402 identifies chains with CAIP-2 identifiers:
 
 ```text
-eip155:1          → Ethereum mainnet
-eip155:8453       → Base mainnet
-eip155:84532      → Base Sepolia
-solana:5eykt4Us... → Solana mainnet
+eip155:1        → Ethereum mainnet
+eip155:8453     → Base mainnet
+eip155:84532    → Base Sepolia
+solana:5eykt4…  → Solana mainnet
 ```
 
-A scheme implementation is always tied to a concrete `(scheme, network)` pair.  
-Supporting `exact` on Base is a different code path from `exact` on Solana.
+A scheme is always implemented for a concrete pair `(scheme, network)`.  
+Supporting `exact` on Base is a different code path from supporting `exact` on Solana.
 
 Note:
-This is why the SDKs have separate packages (`@x402/evm`, `@x402/svm`, etc.).
+This is why the TypeScript SDKs ship separate packages such as `@x402/evm` and `@x402/svm`. The cryptography and transaction formats are not the same.
 
 ---
 
-## Signing model (EVM `exact`)
+## How an agent is prevented from bypassing the paywall
 
-Most common pattern today:
+This is the question many of you asked.
 
-**EIP-3009 Transfer With Authorization** (USDC family)
-- Off-chain signature
-- Relayer/facilitator submits `transferWithAuthorization`
-- User does not need gas in the same token
+The content is never sent until payment is verified.
 
-Alternative: **Permit2**
-- More general (any ERC-20)
-- Slightly more complex flow
-- Widely supported
+```text
+Agent → GET /article
+Server → 402 + payment challenge   ← body is empty or nearly empty
 
-The PaymentPayload contains the signature + the authorization parameters.  
-Facilitator re-creates the expected hash and checks `ecrecover`.
+Agent → GET /article + valid PAYMENT-SIGNATURE
+Server → verifies → settles → 200 + full content
+```
+
+There is no HTML to strip, no JavaScript paywall to disable, no cookie to forge.  
+The bytes of the article simply do not leave the server until the cryptographic proof is accepted.
 
 Note:
-If students know EIP-712, this will click immediately. If not, explain that it is a typed structured signature, not a raw personal_sign.
+Pause here. This is the most important security insight in the whole talk. Traditional web paywalls send the content and then try to hide it. x402 never sends the content in the first place.
 
 ---
 
-## Security properties
+## Common bypass attempts and why they fail
 
-**What the protocol gives you**
-- Client cannot be charged more than they signed
-- Replay protection via nonces / unique authorizations
-- Server never sees the client's private key
+| Attempt | Why it fails |
+|---------|--------------|
+| Ignore the 402 and keep requesting | Server keeps answering 402. No content is ever returned. |
+| Spoof a normal browser User-Agent | Payment is required by cryptographic proof, not by User-Agent. |
+| Replay an old signature | Nonces and unique authorizations make replays invalid. |
+| Hit the origin server directly | Origin should only accept traffic from Cloudflare (or your own edge). |
+| Use residential proxies | Again, payment proof is independent of IP address. |
+
+Note:
+Walk through two or three of these. The pattern is always the same: the enforcement point is the absence of content, not a soft client-side check.
+
+---
+
+## What if a human opens the same URL in a browser?
+
+It depends on how the site is configured.
+
+**Cloudflare Pay Per Crawl** (the product many of you saw in the links) is aimed at AI crawlers. Normal Chrome or Firefox visitors are usually treated as humans and receive a normal 200 with the full page.
+
+**Pure x402 endpoints** give the site owner a choice:
+- Charge only agents (most common)
+- Charge everyone
+- Show humans a classic Stripe-style checkout while agents speak x402
+
+A normal browser that hits a pure 402 endpoint just sees an empty or error-like page, because browsers do not understand the payment headers and cannot automatically pay with a wallet.
+
+Note:
+The design goal is a parallel payment rail for machines that does not break the existing human web. That is why most production deployments leave ordinary browsers alone.
+
+---
+
+## How does the website know it is an agent?
+
+Several signals are combined:
+
+1. **User-Agent string** — many AI crawlers openly identify themselves (`GPTBot`, `ClaudeBot`, `Google-Extended`, etc.)
+2. **Cryptographic bot authentication** — newer standard where legitimate AI companies sign their requests
+3. **Behavioral and ML signals** — rate, TLS fingerprint, missing browser headers, headless-browser tells
+4. **IP / ASN reputation** — data-center ranges versus residential ISPs
+5. **Protocol participation** — if the client sends `PAYMENT-SIGNATURE` or MPP headers, it has already declared itself a machine
+
+Cloudflare’s AI Crawl Control uses the first four at global scale.  
+Once a client speaks x402 or MPP, the fifth signal becomes definitive.
+
+Note:
+Be honest with the class: detection is never perfect against a determined adversary. That is exactly why payment is stronger than pure blocking. Even a perfect human mimic still has to pay if the content is gated by a real payment requirement.
+
+---
+
+## Security properties the protocol gives you
+
+- Client cannot be charged more than the amount it signed
+- Replay protection through nonces and unique authorizations
+- Resource Server never sees the client’s private key
 - Facilitator is constrained by the signed intent
 
-**What you still have to think about**
-- Facilitator liveness and honesty (mitigate by running your own or using multiple)
-- Front-running / MEV on settlement (usually low impact for small amounts)
-- Correct amount + asset + recipient in the requirement
-- Expiration of authorizations
+What you still have to design for:
+- Facilitator availability and honesty
+- Correct amount, asset, and recipient in the requirement
+- Authorization expiry
+- Whether you self-facilitate or trust an external one
 
 Note:
-Ask the class: "Who is trusted in this system?"  
-Answer: The client trusts the facilitator to settle correctly; the server trusts the facilitator to verify correctly. The cryptography protects the amounts.
+Ask the room: “Who is actually trusted in this system?”  
+The cryptography protects the amounts. The Facilitator is trusted for liveness and correct settlement, which is why many teams eventually run their own or use multiple.
 
 ---
 
-## Resource Server responsibilities
+## Resource Server checklist
 
-Minimal correct implementation:
-
-1. On unprotected request → return 402 + well-formed `PAYMENT-REQUIRED`
-2. On request with `PAYMENT-SIGNATURE` → call facilitator `/verify`
+1. Unprotected request → respond 402 + well-formed `PAYMENT-REQUIRED`
+2. Request that carries `PAYMENT-SIGNATURE` → call `/verify`
 3. If valid → call `/settle` (or settle yourself)
-4. If settlement succeeds → return resource + `PAYMENT-RESPONSE`
-5. If anything fails → return 402 again (optionally with updated requirements)
+4. On successful settlement → return the resource + `PAYMENT-RESPONSE`
+5. On any failure → return 402 again
 
-Never fulfill the resource before settlement is confirmed (for `exact`).
+Never release the resource before settlement is confirmed when you are using the `exact` scheme.
 
 Note:
-This is the checklist students should remember when they implement a seller.
+This five-step list is what I want students to be able to recite if they implement a seller. It is the minimal correct behavior.
 
 ---
 
-## Client responsibilities
+## Client checklist
 
-1. Detect 402
+1. Notice the 402
 2. Decode `PAYMENT-REQUIRED`
-3. Choose one acceptable entry from `accepts`
-4. Construct the scheme-specific payload
-5. Sign it with the user's wallet
+3. Pick one entry from `accepts`
+4. Build the scheme-specific payload
+5. Sign it with the wallet
 6. Retry the original request with `PAYMENT-SIGNATURE`
-7. Handle `PAYMENT-RESPONSE` (optional but useful for UX / accounting)
+7. Optionally read `PAYMENT-RESPONSE` for accounting
 
-Libraries (`@x402/fetch`, etc.) turn this into a one-liner for most cases.
+Libraries such as `@x402/fetch` collapse most of this into a single call. You still need to understand the steps when something breaks.
 
 Note:
-Show that the hard part is abstracted, but understanding the steps is necessary for debugging.
+Debugging almost always means looking at the raw headers. Encourage students to base64-decode a real `PAYMENT-REQUIRED` and a real `PAYMENT-SIGNATURE` at least once.
 
 ---
 
-## Implementation surface (current SDKs)
+## Current SDKs and a sensible learning path
 
-- **TypeScript**: `@x402/core`, `@x402/evm`, `@x402/svm`, framework adapters (Express, Hono, Next.js, …)
-- **Python**: `x402` package
-- **Go**: official module under the foundation repo
+- TypeScript: `@x402/core`, `@x402/evm`, `@x402/svm`, plus Express / Hono / Next adapters
+- Python: `x402` package
+- Go: official module in the foundation repository
 
-Recommended learning path:
-1. Read the `exact` scheme spec for EVM
+Suggested order:
+1. Read the `exact` scheme specification for EVM
 2. Run the seller quickstart
-3. Inspect real `PAYMENT-REQUIRED` / `PAYMENT-SIGNATURE` values
-4. Then try a second network or the `upto` scheme
+3. Decode real headers yourself
+4. Add a second network or try the `upto` scheme
 
 Note:
-Encourage them to actually base64-decode the headers in the browser or with `jq` — it demystifies everything.
+The fastest way to demystify the protocol is to watch the headers in the network tab or with curl while a payment succeeds.
 
 ---
 
-## Design decisions worth discussing
+## Design choices worth remembering
 
-- **Why headers instead of a new HTTP method or body?**  
-  Maximum compatibility with existing infrastructure.
-
-- **Why scheme + network separation?**  
-  Allows independent evolution of payment mechanics and chain support.
-
-- **Why optional facilitator?**  
-  Simple cases can self-facilitate; complex or high-volume cases can outsource.
-
-- **Why Base64?**  
-  Safe transit through any HTTP intermediary that might mangle JSON in headers.
+- Headers instead of body → maximum compatibility with existing HTTP infrastructure
+- Scheme separated from network → payment logic and chain support can evolve independently
+- Optional Facilitator → simple cases can self-facilitate; high-volume cases can outsource
+- Base64 → safe transit through any intermediary that might mangle raw JSON in headers
 
 Note:
-These are good exam / discussion questions.
+These four decisions explain most of the shape of the protocol. They are good discussion or exam material.
 
 ---
 
-## Current limitations & open areas
+## Honest limitations today
 
-- Refunds are not part of the base protocol (payments are push + final)
-- Discovery of paid endpoints is still early (Bazaar / extensions)
-- Fiat on-ramps and gas sponsorship are facilitator features, not core protocol
-- Complex pricing (subscriptions, tiered, usage-based beyond `upto`) needs higher-level logic
+- No protocol-level refunds — payments are push and final
+- Discovery of paid endpoints is still early
+- Fiat on-ramps and gas sponsorship live at the Facilitator layer, not in the core protocol
+- Complex pricing models need extra logic on top of the basic schemes
 - Cross-chain atomicity is out of scope
 
 Note:
-Be honest about the current state. Students respect that more than hype.
+Students respect realism. State the limitations cleanly and move on. The protocol is useful today even with these constraints.
 
 ---
 
 ## Key takeaways
 
-1. x402 is a **negotiation + authorization** protocol layered on HTTP 402
-2. Three headers carry all the state
-3. Schemes define *how* money moves; networks define *where*
-4. Facilitators remove the need for every server to run chain infrastructure
-5. The cryptographic boundary is the signed PaymentPayload — everything else is orchestration
+1. x402 is a negotiation and authorization protocol layered on HTTP 402
+2. Three headers carry the entire state
+3. Schemes define how money moves; networks define where
+4. The content is simply not sent until payment is verified — that is the real enforcement
+5. Detection of agents is useful, but cryptographic payment is stronger than detection alone
 
 Note:
-Repeat the three-headers point. It is the simplest way to remember the protocol.
+Repeat the fourth point. It is the one that answers the bypass question cleanly.
 
 ---
 
-## Resources for going deeper
+## Resources
 
-| Resource | What you get |
-|----------|--------------|
-| [github.com/x402-foundation/x402](https://github.com/x402-foundation/x402) | Specs, SDKs, examples |
-| `specs/schemes/` | Exact definitions of each scheme |
-| [docs.x402.org](https://docs.x402.org) | Official documentation |
-| [x402.org](https://x402.org) | High-level + ecosystem |
+| Resource | Purpose |
+|----------|---------|
+| github.com/x402-foundation/x402 | Specs, SDKs, examples |
+| specs/schemes/ | Formal definition of each scheme |
+| docs.x402.org | Official documentation |
+| x402.org | High-level overview and ecosystem |
 | x402scan.com | Live transaction explorer |
-
-Start with the `exact` EVM scheme specification and the seller quickstart.
+| developers.cloudflare.com/ai-crawl-control | Pay Per Crawl and AI detection |
 
 Note:
-If time remains, open the GitHub repo live and walk through the folder structure.
+If time remains, open the GitHub repository and show the folder layout — especially `specs/schemes` and the TypeScript examples.
 
 ---
 
-## Discussion
+## Discussion questions
 
-- How would you design a scheme for streaming LLM token payments?
-- Should facilitators be able to sponsor gas by default?
-- What happens if a facilitator goes offline mid-settlement?
-- Is self-facilitation safe for a high-value API?
+- How would you design a scheme for streaming LLM token billing?
+- Should Facilitators sponsor gas by default?
+- What is the correct behavior if the Facilitator goes offline after `/verify` but before `/settle`?
+- When is self-facilitation safe, and when is it a bad idea?
+- How would you combine x402 for agents with a normal Stripe checkout for human visitors?
 
 Note:
-These questions force them to apply the model instead of just memorizing it.
+These questions force students to apply the model instead of just repeating definitions. Use them to close the session or as take-home thinking prompts.
 
 ---
 
@@ -532,9 +555,12 @@ These questions force them to apply the model instead of just memorizing it.
 Senior Blockchain Developer @ Frax  
 Metana Bootcamp
 
-Slides: `github.com/metana-bootcamp/tech-talks`
+Slides → github.com/metana-bootcamp/tech-talks
 
-Press **S** for speaker notes
+Press **S** for the speaker script
+
+Note:
+Thank the class. Remind them the slides and the spoken script are in the repository if they want to revisit any section.
 
           </textarea>
         </section>
@@ -554,10 +580,11 @@ Press **S** for speaker notes
         slideNumber: "c/t",
         transition: "slide",
         backgroundTransition: "fade",
+        width: 1280,
+        height: 720,
+        margin: 0.06,
         plugins: [RevealMarkdown, RevealHighlight, RevealNotes, RevealZoom, RevealSearch],
-        markdown: {
-          smartypants: true
-        },
+        markdown: { smartypants: true },
         showNotes: false
       });
     </script>

@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tempo – Mental Model & Architecture</title>
+
+  <!-- Local Reveal.js (submodule) -->
+  <link rel="stylesheet" href="../../../reveal.js/dist/reveal.css">
+  <link rel="stylesheet" href="../../../reveal.js/dist/theme/black.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+  <style>
+    .reveal h1, .reveal h2, .reveal h3 {
+      text-transform: none;
+      font-weight: 600;
+    }
+    .reveal .slides section {
+      text-align: left;
+    }
+    .reveal .center {
+      text-align: center;
+    }
+    .reveal .subtitle {
+      color: #aaa;
+      font-size: 0.7em;
+      margin-top: 0.3em;
+    }
+    .reveal .mermaid {
+      display: flex;
+      justify-content: center;
+      background: #111;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0 4px 0;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    .reveal .mermaid svg {
+      max-width: 100%;
+      height: auto;
+    }
+    .reveal .diagram-caption {
+      text-align: center;
+      color: #777;
+      font-size: 0.48em;
+      margin-top: 4px;
+    }
+    .reveal ul, .reveal ol {
+      font-size: 0.92em;
+    }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- Title -->
+      <section>
+        <h1 class="center">Tempo</h1>
+        <p class="center subtitle">Mental Model & Architecture</p>
+
+        <aside class="notes">
+          Welcome.
+
+          This is the first session in a deep series on Tempo and later the Machine Payments Protocol.
+
+          Today we focus only on building a clear mental model.
+          We will not rush. The goal is that every concept is understood from the ground up.
+        </aside>
+      </section>
+
+      <!-- Agenda -->
+      <section>
+        <h2>What We Will Cover</h2>
+        <ul>
+          <li>Why most chains struggle with payments</li>
+          <li>Tempo’s core design thesis</li>
+          <li>Five foundational decisions</li>
+          <li>How the main pieces fit together</li>
+          <li>A durable mental model for everything that follows</li>
+        </ul>
+
+        <aside class="notes">
+          This session is conceptual by design.
+          We are not writing code yet.
+          A weak mental model makes every later topic harder.
+          A strong one makes TIP-20, Tempo Transactions, policies, fees, and Zones much easier to understand.
+        </aside>
+      </section>
+
+      <!-- Problem -->
+      <section>
+        <h2>The Core Problem</h2>
+        <p style="font-size: 1.25em; margin-top: 1.1em;">
+          Most blockchains were designed as<br>
+          <strong>general-purpose computers</strong> first.
+        </p>
+        <p style="margin-top: 1em; color: #aaa;">
+          Payments were treated as a secondary use case.
+        </p>
+
+        <aside class="notes">
+          This is the root issue.
+          Ethereum and the majority of L2s optimize for general computation.
+          When you try to run high-volume, low-value, predictable payments on them, structural friction appears.
+        </aside>
+      </section>
+
+      <!-- What breaks 1 -->
+      <section>
+        <h2>What Usually Breaks</h2>
+        <div class="mermaid">
+          flowchart TD
+            A[High Payment Volume] --> B[Shared Blockspace]
+            B --> C[Congestion]
+            C --> D[Unpredictable Fees]
+            C --> E[Delayed Payments]
+        </div>
+        <p class="diagram-caption">Payments compete with everything else for the same blockspace</p>
+
+        <aside class="notes">
+          When payments share blockspace with complex DeFi, NFT mints, or heavy computation, congestion directly hurts payment traffic.
+          Fees become unpredictable and inclusion can be delayed.
+        </aside>
+      </section>
+
+      <!-- What breaks 2 -->
+      <section>
+        <h2>Additional Structural Problems</h2>
+        <div class="mermaid">
+          flowchart LR
+            F[Volatile Gas Token] --> G[Difficult unit economics]
+            H[Probabilistic Finality] --> I[Settlement uncertainty]
+        </div>
+        <p class="diagram-caption">Volatile gas and uncertain finality create real friction for payment systems</p>
+
+        <aside class="notes">
+          Two more important problems:
+          1. Paying gas in a volatile asset makes costs hard to predict and hard to budget.
+          2. Probabilistic finality means you never have the same settlement certainty that traditional payment systems expect.
+        </aside>
+      </section>
+
+      <!-- Thesis -->
+      <section>
+        <h2>Tempo’s Thesis</h2>
+        <blockquote style="font-size: 1.15em;">
+          A payments-first Layer 1,<br>
+          purpose-built for stablecoin payments at scale.
+        </blockquote>
+        <p style="margin-top: 1.3em; color: #aaa;">
+          Incubated by Stripe and Paradigm
+        </p>
+
+        <aside class="notes">
+          Tempo starts from the opposite direction.
+          Instead of taking a general-purpose chain and trying to make payments work on it,
+          it was designed for payments first while still remaining fully programmable.
+          The combination of Stripe’s payments expertise and Paradigm’s systems expertise is deliberate.
+        </aside>
+      </section>
+
+      <!-- Five decisions -->
+      <section>
+        <h2>Five Foundational Decisions</h2>
+        <ol>
+          <li>No native gas token</li>
+          <li>Fees paid in USD stablecoins</li>
+          <li>Deterministic, sub-second finality</li>
+          <li>Dedicated payment lanes</li>
+          <li>Full EVM compatibility</li>
+        </ol>
+
+        <aside class="notes">
+          These five decisions shape almost every other part of the protocol.
+          We will now examine each one with a simple diagram so the ideas stick.
+        </aside>
+      </section>
+
+      <!-- Decision 1 -->
+      <section>
+        <h2>1. No Native Gas Token</h2>
+        <div class="mermaid">
+          flowchart LR
+            subgraph Traditional["Traditional"]
+              U1[User] --> G[Must hold volatile gas token]
+              G --> TX1[Send transaction]
+            end
+            subgraph TempoChain["Tempo"]
+              U2[User] --> S[Holds only stablecoins]
+              S --> TX2[Send transaction]
+            end
+            Traditional ~~~ TempoChain
+        </div>
+        <p class="diagram-caption">Users never need a volatile asset just to pay for gas</p>
+
+        <aside class="notes">
+          On most chains a user must acquire and manage a volatile gas token.
+          On Tempo the user only needs stablecoins.
+          This removes a significant source of friction and risk, especially for businesses and autonomous agents.
+        </aside>
+      </section>
+
+      <!-- Decision 2 -->
+      <section>
+        <h2>2. Stablecoin Gas + Fee AMM</h2>
+        <div class="mermaid">
+          flowchart LR
+            User["User pays with any USD TIP-20"] --> AMM[Fee AMM]
+            AMM --> Val["Validator receives preferred stablecoin"]
+        </div>
+        <p class="diagram-caption">The protocol converts stablecoins automatically</p>
+
+        <aside class="notes">
+          The user can pay gas using different USD-denominated TIP-20 tokens.
+          An enshrined Fee AMM converts the token into whatever the current validator prefers to receive.
+          From the user’s perspective the experience is simple.
+        </aside>
+      </section>
+
+      <!-- Decision 3 -->
+      <section>
+        <h2>3. Deterministic Finality</h2>
+        <div class="mermaid">
+          flowchart TD
+            subgraph MostChains["Most Chains"]
+              B1[Block] --> B2[Additional confirmations]
+              B2 --> B3[Reorg still possible]
+            end
+            subgraph TempoFinality["Tempo"]
+              T1[Block produced] --> T2[Finalized in ~0.5s]
+              T2 --> T3[No reorg possible]
+            end
+        </div>
+        <p class="diagram-caption">Simplex BFT provides fast, deterministic finality</p>
+
+        <aside class="notes">
+          Tempo uses Simplex BFT.
+          Blocks are produced roughly every 0.5–0.6 seconds and reach deterministic finality quickly.
+          Once a block is finalized it cannot be reorganized.
+          This gives the kind of settlement certainty that real payment systems require.
+        </aside>
+      </section>
+
+      <!-- Decision 4 -->
+      <section>
+        <h2>4. Payment Lanes</h2>
+        <div class="mermaid">
+          flowchart TD
+            subgraph OneBlock["One Block"]
+              PL["Payment Lane - Reserved for payments"]
+              GL[General Lane]
+            end
+            Pay[Payment transactions] --> PL
+            Other[Other transactions] --> GL
+        </div>
+        <p class="diagram-caption">Payments receive dedicated blockspace even under congestion</p>
+
+        <aside class="notes">
+          This is one of the most important protocol-level guarantees.
+          A significant portion of blockspace is reserved for payment transactions.
+          Even when the network is under heavy load from complex contracts, payments still have room.
+        </aside>
+      </section>
+
+      <!-- Decision 5 -->
+      <section>
+        <h2>5. Full EVM Compatibility</h2>
+        <div class="mermaid">
+          flowchart LR
+            Sol[Solidity] --> Tools[Foundry / Hardhat / Remix]
+            Tools --> Tempo[Tempo]
+            Tempo --> EVM[Standard EVM execution]
+        </div>
+        <p class="diagram-caption">Existing Solidity knowledge and tooling transfer directly</p>
+
+        <aside class="notes">
+          Despite the payment-specific design choices, Tempo remains fully EVM compatible.
+          You can continue using the same languages and tools you already know.
+          The new surface area is mainly in TIP-20, Tempo Transactions, policies, and the fee system.
+        </aside>
+      </section>
+
+      <!-- Combined flow -->
+      <section>
+        <h2>Putting It Together</h2>
+        <div class="mermaid">
+          flowchart TB
+            User[User or Agent] --> TIP20[TIP-20 Stablecoins]
+            TIP20 --> TT[Tempo Transaction]
+            TT --> PL[Payment Lane]
+            PL --> Final[Finalized in ~0.5s]
+            AMM[Fee AMM] -.-> TT
+        </div>
+        <p class="diagram-caption">High-level flow of a payment on Tempo</p>
+
+        <aside class="notes">
+          Here is the combined picture.
+          A user or agent holds TIP-20 stablecoins.
+          They submit a Tempo Transaction.
+          The transaction uses the payment lane.
+          It reaches fast deterministic finality.
+          The Fee AMM handles gas conversion in the background.
+        </aside>
+      </section>
+
+      <!-- Protocol map -->
+      <section>
+        <h2>Protocol Map</h2>
+        <div class="mermaid">
+          flowchart TB
+            subgraph Protocol["Protocol"]
+              TIP20[TIP-20 Tokens]
+              TT[Tempo Transactions]
+              Fees[Fees + Fee AMM]
+              Lanes[Payment Lanes]
+              DEX[Enshrined Stablecoin DEX]
+              Pol[TIP-403 Policies]
+              Zones[Private Zones]
+            end
+        </div>
+        <p class="diagram-caption">Major components we will examine in depth later</p>
+
+        <aside class="notes">
+          This is the map of the protocol.
+          In later sessions we will open each of these boxes systematically:
+          TIP-20, Tempo Transactions, the fee system and payment lanes,
+          TIP-403 policies, the enshrined DEX, and Private Zones.
+        </aside>
+      </section>
+
+      <!-- Mental model -->
+      <section>
+        <h2>Core Mental Model</h2>
+        <p style="font-size: 1.2em; margin-top: 0.9em;">
+          Most chains optimize for general computation<br>
+          and then try to support payments.
+        </p>
+        <p style="font-size: 1.2em; margin-top: 1.1em;">
+          <strong>Tempo optimizes for payments</strong><br>
+          and still supports general computation.
+        </p>
+
+        <aside class="notes">
+          This is the central shift in thinking.
+          Once this inversion is clear, the rest of the protocol design becomes much easier to reason about.
+        </aside>
+      </section>
+
+      <!-- Next -->
+      <section>
+        <h2>Next Session</h2>
+        <p style="font-size: 1.15em; margin-top: 1em;">
+          Getting started on Tempo:<br>
+          connecting to the network, obtaining funds,<br>
+          and sending the first payments.
+        </p>
+
+        <aside class="notes">
+          In the next session we move from concepts to practice.
+          We will connect to the network, use the faucet, and send real transactions including memos.
+          Come prepared with a wallet.
+        </aside>
+      </section>
+
+      <!-- Questions -->
+      <section class="center">
+        <h2>Questions</h2>
+        <p style="color: #888; margin-top: 0.9em; font-size: 0.9em;">
+          Clarify the big picture before we move on.
+        </p>
+
+        <aside class="notes">
+          Take questions now.
+          If any part of the overall design still feels unclear, this is the best time to resolve it.
+          Everything that follows builds on this mental model.
+        </aside>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Local Reveal.js -->
+  <script src="../../../reveal.js/dist/reveal.js"></script>
+  <script src="../../../reveal.js/plugin/notes/notes.js"></script>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+      fontFamily: 'inherit',
+      flowchart: {
+        useMaxWidth: true,
+        htmlLabels: true
+      }
+    });
+
+    // Preserve each diagram's original source text. Once mermaid.run()
+    // renders a node, its content becomes the rendered SVG; re-running
+    // mermaid on a node without restoring the source first would re-parse
+    // that SVG as if it were diagram text and fail with UnknownDiagramError.
+    document.querySelectorAll('.mermaid').forEach(node => {
+      node.dataset.source = node.textContent;
+    });
+
+    function fitMermaidToSlideOnce(slide, svg) {
+      const slideRect = slide.getBoundingClientRect();
+      const svgRect = svg.getBoundingClientRect();
+
+      // The section's own bounding rect can extend past the visible
+      // viewport — reveal.js doesn't auto-shrink a slide whose content
+      // is taller than its configured canvas height, it just lets it
+      // spill past the .reveal container, which then clips it via
+      // overflow:hidden. Clamp to whichever boundary is smaller.
+      const revealEl = slide.closest('.reveal');
+      const revealRect = revealEl ? revealEl.getBoundingClientRect() : slideRect;
+
+      // Reserve space for anything after the diagram (e.g. the
+      // .diagram-caption) so fitting the svg doesn't push it off-slide.
+      // A transform-based scale wouldn't reclaim this space, since
+      // `transform` doesn't affect layout/document flow — only the
+      // svg's actual box dimensions do.
+      let bottomLimit = Math.min(slideRect.bottom, revealRect.bottom);
+      const mermaidDiv = svg.closest('.mermaid');
+      let sibling = mermaidDiv ? mermaidDiv.nextElementSibling : null;
+      while (sibling) {
+        bottomLimit -= sibling.getBoundingClientRect().height;
+        sibling = sibling.nextElementSibling;
+      }
+
+      const availableHeight = bottomLimit - svgRect.top - 20;
+      const availableWidth = slideRect.width - 24;
+
+      const heightScale = availableHeight > 0 ? availableHeight / svgRect.height : 1;
+      const widthScale = availableWidth > 0 ? availableWidth / svgRect.width : 1;
+      const scale = Math.min(1, heightScale, widthScale);
+
+      if (scale < 0.995) {
+        // Reveal applies its own ancestor-level transform: scale(...) to
+        // fit the whole deck to the current viewport, so getBoundingClientRect
+        // (used above) returns screen-space pixels, while element.style
+        // width/height are in local, pre-ancestor-scale CSS pixels. `scale`
+        // itself is a dimensionless ratio and safe to reuse, but it must be
+        // applied to the *local* natural size (via getComputedStyle, taken
+        // before this pass's resize below), not the screen-space svgRect —
+        // otherwise the assigned size is off by the ancestor's scale factor.
+        const localWidth = parseFloat(getComputedStyle(svg).width);
+        const localHeight = parseFloat(getComputedStyle(svg).height);
+        svg.style.width = (localWidth * scale) + 'px';
+        svg.style.height = (localHeight * scale) + 'px';
+        return true;
+      }
+      return false;
+    }
+
+    function fitMermaidToSlide(slide) {
+      const svgs = slide.querySelectorAll('.mermaid svg');
+      svgs.forEach(svg => {
+        // Reset to natural size first so measurements below reflect the
+        // diagram's real dimensions, not a previous fit pass.
+        svg.style.width = '';
+        svg.style.height = '';
+
+        // Shrinking the svg changes the slide's content height, which can
+        // shift reveal's own vertical-centering offset for the section,
+        // slightly changing how much space is actually available. Two
+        // passes converges this in practice without needing to reset to
+        // natural size again in between (each pass just shrinks further
+        // from wherever the previous pass landed).
+        fitMermaidToSlideOnce(slide, svg);
+        fitMermaidToSlideOnce(slide, svg);
+      });
+    }
+
+    let mermaidRenderInFlight = null;
+
+    function renderMermaidOnCurrentSlide() {
+      const slide = Reveal.getCurrentSlide();
+      if (!slide) return;
+
+      const nodes = slide.querySelectorAll('.mermaid');
+      if (nodes.length === 0) return;
+
+      // Reveal can fire both the initialize() ready-promise and a
+      // 'slidechanged' event for the same slide on a hash deep-link
+      // (e.g. loading directly to #/7). Running mermaid.run() twice
+      // concurrently on the same nodes corrupts the render, so only
+      // one render is ever in flight; a caller that arrives while one
+      // is running just re-queues itself for right after.
+      if (mermaidRenderInFlight) {
+        mermaidRenderInFlight = mermaidRenderInFlight.then(() => renderMermaidOnCurrentSlide());
+        return;
+      }
+
+      nodes.forEach(node => {
+        node.textContent = node.dataset.source;
+        node.removeAttribute('data-processed');
+      });
+
+      mermaidRenderInFlight = mermaid.run({ nodes }).then(() => {
+        requestAnimationFrame(() => fitMermaidToSlide(slide));
+        // Reveal's slide transition (~800ms by default) is still
+        // animating when 'slidechanged' fires, so an immediate fit can
+        // measure the slide mid-transition and undershoot. Re-fit once
+        // the transition has settled.
+        setTimeout(() => fitMermaidToSlide(slide), 900);
+      }).catch(err => {
+        console.error('mermaid render failed', err);
+      }).finally(() => {
+        mermaidRenderInFlight = null;
+      });
+    }
+
+    Reveal.initialize({
+      hash: true,
+      slideNumber: true,
+      controls: true,
+      progress: true,
+      transition: 'slide',
+      plugins: [ RevealNotes ]
+    }).then(() => {
+      renderMermaidOnCurrentSlide();
+    });
+
+    Reveal.on('slidechanged', () => {
+      setTimeout(renderMermaidOnCurrentSlide, 40);
+    });
+
+    Reveal.on('resize', () => {
+      const slide = Reveal.getCurrentSlide();
+      if (slide) fitMermaidToSlide(slide);
+    });
+  </script>
+</body>
+</html>
