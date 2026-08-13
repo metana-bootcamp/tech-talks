@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tempo – Tempo Transactions</title>
+
+  <!-- Local Reveal.js (submodule) -->
+  <link rel="stylesheet" href="../../../reveal.js/dist/reveal.css">
+  <link rel="stylesheet" href="../../../reveal.js/dist/theme/black.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+  <style>
+    .reveal h1, .reveal h2, .reveal h3 {
+      text-transform: none;
+      font-weight: 600;
+    }
+    .reveal .slides section {
+      text-align: left;
+    }
+    .reveal .center {
+      text-align: center;
+    }
+    .reveal .subtitle {
+      color: #aaa;
+      font-size: 0.7em;
+      margin-top: 0.3em;
+    }
+    .reveal .mermaid {
+      display: flex;
+      justify-content: center;
+      background: #111;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0 4px 0;
+    }
+    .reveal .diagram-caption {
+      text-align: center;
+      color: #777;
+      font-size: 0.48em;
+      margin-top: 4px;
+    }
+    .reveal ul, .reveal ol {
+      font-size: 0.92em;
+    }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- Title -->
+      <section>
+        <h1 class="center">Tempo Transactions</h1>
+        <p class="center subtitle">The Native Transaction Type</p>
+
+        <aside class="notes">
+          Welcome.
+
+          Today we focus on Tempo Transactions.
+          This is the native transaction type on Tempo and one of the most important developer-facing primitives.
+          The official guidance is clear: if you are building on Tempo, you should strongly prefer Tempo Transactions over classic Ethereum transactions.
+        </aside>
+      </section>
+
+      <!-- What it is -->
+      <section>
+        <h2>What Is a Tempo Transaction?</h2>
+        <ul>
+          <li>A new EIP-2718 transaction type</li>
+          <li>Type byte: <code>0x76</code></li>
+          <li>Available only on Tempo</li>
+          <li>Designed specifically for payment and application workflows</li>
+        </ul>
+
+        <aside class="notes">
+          Tempo Transactions are not an application-layer abstraction.
+          They are a protocol-native transaction type.
+          This is why they can offer capabilities that are difficult or inefficient to replicate with standard Ethereum transactions alone.
+        </aside>
+      </section>
+
+      <!-- Why they exist -->
+      <section>
+        <h2>Why They Exist</h2>
+        <p style="font-size: 1.15em; margin-top: 0.9em;">
+          Classic Ethereum transactions were not designed<br>
+          with modern payment UX in mind.
+        </p>
+        <ul>
+          <li>Fee token flexibility</li>
+          <li>Sponsorship</li>
+          <li>Batching</li>
+          <li>Parallelism</li>
+          <li>Delegation and scheduling</li>
+        </ul>
+
+        <aside class="notes">
+          Many of the features people want for payment applications — sponsorship, batching, better nonce handling, scheduled execution — usually require additional infrastructure such as bundlers or paymasters on other chains.
+          Tempo folds the most important of these capabilities into the transaction type itself.
+        </aside>
+      </section>
+
+      <!-- Core capabilities overview -->
+      <section>
+        <h2>Core Capabilities</h2>
+        <ol>
+          <li>Configurable fee tokens</li>
+          <li>Fee sponsorship</li>
+          <li>Batch calls</li>
+          <li>Concurrent nonces</li>
+          <li>Access keys</li>
+          <li>Scheduled transactions</li>
+        </ol>
+
+        <aside class="notes">
+          We will walk through each of these capabilities.
+          Together they explain why Tempo Transactions are the recommended default for serious development on the network.
+        </aside>
+      </section>
+
+      <!-- 1. Fee tokens -->
+      <section>
+        <h2>1. Configurable Fee Tokens</h2>
+        <div class="mermaid">
+          flowchart LR
+            User[User selects fee token] --> Tx[Tempo Transaction]
+            Tx --> AMM[Fee AMM]
+            AMM --> Validator[Validator receives preferred token]
+        </div>
+        <p class="diagram-caption">Any USD TIP-20 can be used as the fee token</p>
+
+        <aside class="notes">
+          In a Tempo Transaction you can specify which TIP-20 token should be used to pay fees.
+          The Fee AMM handles conversion so the validator still receives the token it prefers.
+          This is a direct extension of the “no native gas token” design.
+        </aside>
+      </section>
+
+      <!-- 2. Fee sponsorship -->
+      <section>
+        <h2>2. Fee Sponsorship</h2>
+        <div class="mermaid">
+          flowchart LR
+            User[User action] --> App[Application or sponsor]
+            App --> Pays[Pays the fee]
+            User --> Executes[Transaction executes]
+        </div>
+        <p class="diagram-caption">Applications can cover gas so users do not need to hold fee tokens</p>
+
+        <aside class="notes">
+          Fee sponsorship is one of the highest-leverage features for user experience.
+          An application or third party can pay the transaction fee on behalf of the user.
+          This enables feeless flows from the user’s perspective and is especially valuable for agents and consumer applications.
+        </aside>
+      </section>
+
+      <!-- 3. Batch calls -->
+      <section>
+        <h2>3. Batch Calls</h2>
+        <div class="mermaid">
+          flowchart TB
+            Tx[Single Tempo Transaction]
+            Tx --> C1[Call 1]
+            Tx --> C2[Call 2]
+            Tx --> C3[Call 3]
+        </div>
+        <p class="diagram-caption">Multiple calls can be executed together in one transaction</p>
+
+        <aside class="notes">
+          Batching reduces the number of separate transactions a user or agent must send.
+          It improves atomicity, reduces overhead, and simplifies wallet interactions.
+          This is natively supported rather than requiring an external multicall pattern in every case.
+        </aside>
+      </section>
+
+      <!-- 4. Concurrent nonces -->
+      <section>
+        <h2>4. Concurrent Nonces</h2>
+        <ul>
+          <li>Classic accounts are limited by a single sequential nonce</li>
+          <li>Tempo Transactions support independent nonces</li>
+          <li>This enables true parallel transactions from the same account</li>
+        </ul>
+
+        <aside class="notes">
+          Sequential nonces are a major bottleneck for high-throughput applications and agents.
+          Concurrent nonces remove that bottleneck by allowing multiple independent transactions to be in flight at the same time from one account.
+        </aside>
+      </section>
+
+      <!-- 5. Access keys -->
+      <section>
+        <h2>5. Access Keys</h2>
+        <div class="mermaid">
+          flowchart LR
+            Master[Master account] --> Key[Access key]
+            Key --> Scoped[Scoped permissions]
+            Scoped --> Actions[Allowed actions only]
+        </div>
+        <p class="diagram-caption">Delegate limited signing power without exposing the root key</p>
+
+        <aside class="notes">
+          Access keys allow an account to delegate limited transaction authority.
+          This is useful for agents, session keys, automation, and least-privilege designs.
+          Instead of handing over full control, you grant only the permissions that are required.
+        </aside>
+      </section>
+
+      <!-- 6. Scheduled transactions -->
+      <section>
+        <h2>6. Scheduled Transactions</h2>
+        <ul>
+          <li>Transactions can be constrained to execute within a time window</li>
+          <li>Useful for automated payments and time-based workflows</li>
+          <li>Supported at the transaction layer rather than only via external keepers</li>
+        </ul>
+
+        <aside class="notes">
+          Scheduling is another capability that payment systems frequently need.
+          By supporting it at the transaction level, Tempo reduces reliance on external automation infrastructure for many common flows.
+        </aside>
+      </section>
+
+      <!-- Comparison -->
+      <section>
+        <h2>Relation to Other Approaches</h2>
+        <ul>
+          <li><strong>EIP-4337</strong> — account abstraction via bundlers and entry points</li>
+          <li><strong>EIP-7702</strong> — temporary code delegation for EOAs</li>
+          <li><strong>Tempo Transactions</strong> — native transaction type with payment-oriented features built in</li>
+        </ul>
+
+        <aside class="notes">
+          It is useful to understand the landscape.
+          EIP-4337 and EIP-7702 solve related problems in the broader Ethereum ecosystem.
+          Tempo Transactions take a different path by making the most important capabilities native to the chain’s transaction format.
+          That is why the developer experience can be simpler for many payment use cases.
+        </aside>
+      </section>
+
+      <!-- Why prefer them -->
+      <section>
+        <h2>Why Prefer Tempo Transactions</h2>
+        <div class="mermaid">
+          flowchart TB
+            TT[Tempo Transactions]
+            TT --> A[Better fee UX]
+            TT --> B[Sponsorship without extra infra]
+            TT --> C[Batching and parallelism]
+            TT --> D[Delegation and scheduling]
+        </div>
+        <p class="diagram-caption">They are the intended default for serious Tempo development</p>
+
+        <aside class="notes">
+          The recommendation from the protocol side is not subtle.
+          If you are integrating with Tempo, you should plan around Tempo Transactions rather than treating classic Ethereum transactions as the primary path.
+        </aside>
+      </section>
+
+      <!-- Developer view -->
+      <section>
+        <h2>Developer Perspective</h2>
+        <ul>
+          <li>SDKs exist for TypeScript, Rust, Go, Python, and Foundry-oriented workflows</li>
+          <li>Integration is intentionally designed to be fast</li>
+          <li>Once adopted, many UX patterns become much simpler</li>
+        </ul>
+
+        <aside class="notes">
+          From a practical standpoint, the important shift is mental as much as technical.
+          Once your application thinks in terms of Tempo Transactions, features such as sponsorship and batching stop feeling like special cases.
+        </aside>
+      </section>
+
+      <!-- Connection to previous topics -->
+      <section>
+        <h2>How This Connects</h2>
+        <div class="mermaid">
+          flowchart LR
+            TIP20[TIP-20] --> Fees[Fee tokens]
+            Fees --> TT[Tempo Transactions]
+            TT --> Lanes[Payment lanes]
+            TT --> UX[Payment and agent UX]
+        </div>
+        <p class="diagram-caption">TIP-20 and Tempo Transactions work together</p>
+
+        <aside class="notes">
+          TIP-20 provides the token and fee substrate.
+          Tempo Transactions provide the execution vehicle that makes advanced payment flows practical.
+          Together they form the core developer surface of the chain.
+        </aside>
+      </section>
+
+      <!-- Mental model -->
+      <section>
+        <h2>Mental Model</h2>
+        <p style="font-size: 1.15em; margin-top: 0.9em;">
+          Classic transactions give you the baseline EVM model.
+        </p>
+        <p style="font-size: 1.15em; margin-top: 0.9em;">
+          <strong>Tempo Transactions give you the payment-native model.</strong>
+        </p>
+
+        <aside class="notes">
+          Hold on to that distinction.
+          When we later discuss application patterns, agent flows, and sponsorship, the conversation will assume Tempo Transactions as the default tool.
+        </aside>
+      </section>
+
+      <!-- Next -->
+      <section>
+        <h2>Next Session</h2>
+        <p style="font-size: 1.15em; margin-top: 1em;">
+          Fees, Blockspace, and Payment Lanes<br>
+          in depth.
+        </p>
+
+        <aside class="notes">
+          Next we will open the fee system and payment lane design properly.
+          This includes how fees are priced, how the Fee AMM works, how payment transactions are classified, and why reserved blockspace matters for real payment workloads.
+        </aside>
+      </section>
+
+      <!-- Questions -->
+      <section class="center">
+        <h2>Questions</h2>
+        <p style="color: #888; margin-top: 0.9em; font-size: 0.9em;">
+          Make sure the role of Tempo Transactions is clear.
+        </p>
+
+        <aside class="notes">
+          Take questions now.
+          In particular, check whether sponsorship, batching, and concurrent nonces are well understood.
+        </aside>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Local Reveal.js -->
+  <script src="../../../reveal.js/dist/reveal.js"></script>
+  <script src="../../../reveal.js/plugin/notes/notes.js"></script>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+      fontFamily: 'inherit'
+    });
+
+    document.querySelectorAll('.mermaid').forEach(node => {
+      node.dataset.source = node.textContent;
+    });
+
+    let mermaidRenderInFlight = null;
+
+    function renderMermaidOnCurrentSlide() {
+      const slide = Reveal.getCurrentSlide();
+      if (!slide) return;
+
+      const nodes = slide.querySelectorAll('.mermaid');
+      if (nodes.length === 0) return;
+
+      if (mermaidRenderInFlight) {
+        mermaidRenderInFlight = mermaidRenderInFlight.then(() => renderMermaidOnCurrentSlide());
+        return;
+      }
+
+      nodes.forEach(node => {
+        node.textContent = node.dataset.source;
+        node.removeAttribute('data-processed');
+      });
+
+      mermaidRenderInFlight = mermaid.run({ nodes }).catch(err => {
+        console.error('mermaid render failed', err);
+      }).finally(() => {
+        mermaidRenderInFlight = null;
+      });
+    }
+
+    Reveal.initialize({
+      hash: true,
+      slideNumber: true,
+      controls: true,
+      progress: true,
+      transition: 'slide',
+      plugins: [ RevealNotes ]
+    }).then(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(renderMermaidOnCurrentSlide);
+      });
+    });
+
+    Reveal.on('ready', renderMermaidOnCurrentSlide);
+
+    Reveal.on('slidechanged', () => {
+      setTimeout(renderMermaidOnCurrentSlide, 40);
+    });
+  </script>
+</body>
+</html>

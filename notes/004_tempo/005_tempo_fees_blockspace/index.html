@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tempo – Fees, Blockspace & Payment Lanes</title>
+
+  <!-- Local Reveal.js (submodule) -->
+  <link rel="stylesheet" href="../../../reveal.js/dist/reveal.css">
+  <link rel="stylesheet" href="../../../reveal.js/dist/theme/black.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+  <style>
+    .reveal h1, .reveal h2, .reveal h3 {
+      text-transform: none;
+      font-weight: 600;
+    }
+    .reveal .slides section {
+      text-align: left;
+    }
+    .reveal .center {
+      text-align: center;
+    }
+    .reveal .subtitle {
+      color: #aaa;
+      font-size: 0.7em;
+      margin-top: 0.3em;
+    }
+    .reveal .mermaid {
+      display: flex;
+      justify-content: center;
+      background: #111;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0 4px 0;
+    }
+    .reveal .diagram-caption {
+      text-align: center;
+      color: #777;
+      font-size: 0.48em;
+      margin-top: 4px;
+    }
+    .reveal ul, .reveal ol {
+      font-size: 0.92em;
+    }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- Title -->
+      <section>
+        <h1 class="center">Fees, Blockspace &amp; Payment Lanes</h1>
+        <p class="center subtitle">How Tempo keeps payments cheap and predictable</p>
+
+        <aside class="notes">
+          Welcome.
+
+          So far we have covered the mental model, getting started, TIP-20, and Tempo Transactions.
+          Today we open the fee system and the blockspace design.
+          These two areas explain why payments on Tempo stay cheap and reliable even when the network is busy.
+        </aside>
+      </section>
+
+      <!-- Why this matters -->
+      <section>
+        <h2>Why This Matters</h2>
+        <p style="font-size: 1.15em; margin-top: 0.9em;">
+          On most chains, payments compete for the same blockspace<br>
+          as complex DeFi, NFT mints, and heavy computation.
+        </p>
+        <p style="margin-top: 0.9em; color: #aaa;">
+          The result is unpredictable fees and delayed inclusion.
+        </p>
+
+        <aside class="notes">
+          This is one of the core problems Tempo set out to solve.
+          If payments can be crowded out, unit economics break and real payment systems become unreliable.
+          The fee system and payment lanes are the protocol’s answer.
+        </aside>
+      </section>
+
+      <!-- No native token -->
+      <section>
+        <h2>No Native Gas Token</h2>
+        <ul>
+          <li>There is no volatile native token used for gas</li>
+          <li>All fees are paid in USD-denominated TIP-20 stablecoins</li>
+          <li>This keeps costs predictable and accounting simple</li>
+        </ul>
+
+        <aside class="notes">
+          This decision cascades through the entire fee design.
+          Users and applications never need to acquire a separate speculative asset just to interact with the network.
+        </aside>
+      </section>
+
+      <!-- Fee flow -->
+      <section>
+        <h2>High-Level Fee Flow</h2>
+        <div class="mermaid">
+          flowchart LR
+            User[User selects<br/>USD TIP-20] --> Tx[Transaction]
+            Tx --> AMM[Fee AMM]
+            AMM --> Val[Validator receives<br/>preferred token]
+        </div>
+        <p class="diagram-caption">The Fee AMM converts between stablecoins automatically</p>
+
+        <aside class="notes">
+          The user (or fee payer) chooses a USD TIP-20 token.
+          The Fee AMM converts it into the token the current validator prefers.
+          From the user’s perspective the experience stays simple.
+        </aside>
+      </section>
+
+      <!-- Fee AMM -->
+      <section>
+        <h2>The Fee AMM</h2>
+        <ul>
+          <li>Protocol-native component</li>
+          <li>Provides liquidity for fee-token conversion</li>
+          <li>Fixed conversion rate of 0.9970 (0.3% to liquidity providers)</li>
+          <li>Insufficient liquidity makes the transaction invalid</li>
+        </ul>
+
+        <aside class="notes">
+          The Fee AMM is not an optional application.
+          It is part of the protocol and is what makes multi-stablecoin fee payment practical.
+          Liquidity must exist for the chosen fee token; otherwise the transaction cannot proceed.
+        </aside>
+      </section>
+
+      <!-- Fee token selection -->
+      <section>
+        <h2>How the Fee Token Is Chosen</h2>
+        <ol>
+          <li>Transaction-level <code>fee_token</code> (highest priority)</li>
+          <li>Account-level default set by the fee payer</li>
+          <li>Inferred from a TIP-20 transfer or certain DEX calls</li>
+          <li>Fallback to pathUSD</li>
+        </ol>
+
+        <aside class="notes">
+          The protocol has a clear order of precedence.
+          Explicit choice at the transaction level always wins.
+          If nothing is specified, sensible defaults still produce a working fee path.
+        </aside>
+      </section>
+
+      <!-- Sponsorship -->
+      <section>
+        <h2>Fee Sponsorship</h2>
+        <div class="mermaid">
+          flowchart LR
+            User[User / Agent] --> Action[Performs action]
+            Sponsor[Sponsor / App] --> Pays[Pays the fee]
+            Action --> Executes[Transaction executes]
+        </div>
+        <p class="diagram-caption">A third party can pay fees on behalf of the user</p>
+
+        <aside class="notes">
+          Fee sponsorship is a first-class capability.
+          An application, relay, or other account can act as the fee payer.
+          This is essential for feeless user experiences and for many agent flows.
+        </aside>
+      </section>
+
+      <!-- Pricing model -->
+      <section>
+        <h2>Bounded Dynamic Base Fee</h2>
+        <ul>
+          <li>Base fee adjusts with network usage</li>
+          <li>Hard cap keeps costs predictable</li>
+          <li>Floor prevents fees from collapsing to zero in quiet periods</li>
+          <li>Example for a ~50k gas TIP-20 transfer:
+            <ul>
+              <li>Cap ≈ $0.0006</li>
+              <li>Quiet floor ≈ $0.00003</li>
+            </ul>
+          </li>
+        </ul>
+
+        <aside class="notes">
+          The base fee is dynamic but bounded.
+          This combination gives the network a congestion signal while still protecting payment applications from extreme fee spikes.
+        </aside>
+      </section>
+
+      <!-- Blockspace overview -->
+      <section>
+        <h2>Blockspace Design</h2>
+        <p style="font-size: 1.1em; margin-top: 0.8em;">
+          Tempo extends the Ethereum block format<br>
+          with explicit support for payment lanes.
+        </p>
+        <ul>
+          <li>Separate accounting for payment and non-payment capacity</li>
+          <li>System transactions for protocol operations (including the Fee AMM)</li>
+        </ul>
+
+        <aside class="notes">
+          Blockspace is not treated as a single undifferentiated resource.
+          The protocol deliberately partitions capacity so that payments retain guaranteed room.
+        </aside>
+      </section>
+
+      <!-- Payment lanes concept -->
+      <section>
+        <h2>Payment Lanes</h2>
+        <div class="mermaid">
+        flowchart TD
+            subgraph Block["One Block"]
+                PL["Payment Lane - Reserved capacity"]
+                GL["General Lane - Other transactions"]
+            end
+
+            Pay["Payment transactions"] --> PL
+            Other["Non-payment transactions"] --> GL
+        </div>
+        <p class="diagram-caption">Payments receive dedicated blockspace by protocol rule</p>
+
+        <aside class="notes">
+          This is the central idea.
+          A large portion of blockspace is reserved for payment transactions.
+          Even under heavy general computation load, payments still have room and therefore more predictable fees and inclusion.
+        </aside>
+      </section>
+
+      <!-- Classification -->
+      <section>
+        <h2>How a Transaction Is Classified</h2>
+        <p style="margin-top: 0.6em;">A transaction is treated as a <strong>payment</strong> when:</p>
+        <ul>
+          <li>The recipient starts with the TIP-20 payment prefix, or</li>
+          <li>For Tempo Transactions, every top-level call targets a TIP-20 payment address</li>
+        </ul>
+        <p style="margin-top: 0.8em; color: #aaa;">
+          Classification uses only transaction data — no state lookup is required.
+        </p>
+
+        <aside class="notes">
+          Classification is deliberately simple and data-driven.
+          This keeps it efficient at the consensus layer and makes the rules easy to reason about.
+          TIP-20 transfers that qualify automatically benefit from the payment lane.
+        </aside>
+      </section>
+
+      <!-- Dual gas constraints -->
+      <section>
+        <h2>Dual Gas Constraints</h2>
+        <ul>
+          <li><strong>gas_limit</strong> — total capacity of the block</li>
+          <li><strong>general_gas_limit</strong> — limit on non-payment transactions in the proposer lane</li>
+        </ul>
+        <p style="margin-top: 0.9em;">
+          Non-payment transactions cannot consume the entire block.
+          Payment capacity is protected.
+        </p>
+
+        <aside class="notes">
+          Validators enforce both constraints.
+          The total gas used must stay under the overall gas limit, and non-payment traffic in the proposer lane is further constrained by general_gas_limit.
+          This is how the reservation is enforced.
+        </aside>
+      </section>
+
+      <!-- Predictability -->
+      <section>
+        <h2>What This Achieves</h2>
+        <div class="mermaid">
+          flowchart LR
+            Lanes[Payment Lanes] --> Pred[Predictable inclusion]
+            Fees[Bounded fees] --> Cost[Stable unit economics]
+            Pred --> UX[Reliable payment UX]
+            Cost --> UX
+        </div>
+        <p class="diagram-caption">Together, lanes and fees produce payment-grade reliability</p>
+
+        <aside class="notes">
+          The combination is what matters.
+          Reserved blockspace protects inclusion.
+          Bounded stablecoin fees protect cost.
+          Together they create the conditions real payment systems need.
+        </aside>
+      </section>
+
+      <!-- Developer implications -->
+      <section>
+        <h2>Implications for Developers</h2>
+        <ul>
+          <li>Prefer TIP-20 transfers when you want payment-lane behavior</li>
+          <li>Use Tempo Transactions for sponsorship and flexible fee tokens</li>
+          <li>Do not assume general-purpose traffic will always leave room — the protocol already protects payments</li>
+          <li>Budget fees in stablecoin terms, not in a volatile native asset</li>
+        </ul>
+
+        <aside class="notes">
+          From a builder’s perspective the rules are actionable.
+          Structure value-moving flows as TIP-20 payments when possible.
+          Use sponsorship when you want to abstract fees away from the end user or agent.
+        </aside>
+      </section>
+
+      <!-- Mental model -->
+      <section>
+        <h2>Mental Model</h2>
+        <p style="font-size: 1.15em; margin-top: 0.9em;">
+          Fees are stablecoin-native and bounded.
+        </p>
+        <p style="font-size: 1.15em; margin-top: 0.9em;">
+          Blockspace is partitioned so payments keep guaranteed capacity.
+        </p>
+        <p style="font-size: 1.15em; margin-top: 0.9em;">
+          <strong>Payments are first-class at the protocol level.</strong>
+        </p>
+
+        <aside class="notes">
+          This is the key takeaway.
+          Tempo does not merely hope payments will be treated well under congestion.
+          It encodes that preference into the fee system and the block structure itself.
+        </aside>
+      </section>
+
+      <!-- Next -->
+      <section>
+        <h2>Next Session</h2>
+        <p style="font-size: 1.15em; margin-top: 1em;">
+          TIP-403 Policies<br>
+          in depth.
+        </p>
+
+        <aside class="notes">
+          Next we will study the policy system.
+          TIP-403 is how Tempo attaches compliance and access-control rules to TIP-20 tokens, including receive policies, allowlists, and denylists.
+        </aside>
+      </section>
+
+      <!-- Questions -->
+      <section class="center">
+        <h2>Questions</h2>
+        <p style="color: #888; margin-top: 0.9em; font-size: 0.9em;">
+          Make sure the fee path and payment-lane model are clear.
+        </p>
+
+        <aside class="notes">
+          Take questions now.
+          In particular, check understanding of fee-token selection, sponsorship, and how a transaction qualifies for the payment lane.
+        </aside>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Local Reveal.js -->
+  <script src="../../../reveal.js/dist/reveal.js"></script>
+  <script src="../../../reveal.js/plugin/notes/notes.js"></script>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+      fontFamily: 'inherit'
+    });
+
+    document.querySelectorAll('.mermaid').forEach(node => {
+      node.dataset.source = node.textContent;
+    });
+
+    let mermaidRenderInFlight = null;
+
+    function renderMermaidOnCurrentSlide() {
+      const slide = Reveal.getCurrentSlide();
+      if (!slide) return;
+
+      const nodes = slide.querySelectorAll('.mermaid');
+      if (nodes.length === 0) return;
+
+      if (mermaidRenderInFlight) {
+        mermaidRenderInFlight = mermaidRenderInFlight.then(() => renderMermaidOnCurrentSlide());
+        return;
+      }
+
+      nodes.forEach(node => {
+        node.textContent = node.dataset.source;
+        node.removeAttribute('data-processed');
+      });
+
+      mermaidRenderInFlight = mermaid.run({ nodes }).catch(err => {
+        console.error('mermaid render failed', err);
+      }).finally(() => {
+        mermaidRenderInFlight = null;
+      });
+    }
+
+    Reveal.initialize({
+      hash: true,
+      slideNumber: true,
+      controls: true,
+      progress: true,
+      transition: 'slide',
+      plugins: [ RevealNotes ]
+    }).then(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(renderMermaidOnCurrentSlide);
+      });
+    });
+
+    Reveal.on('ready', renderMermaidOnCurrentSlide);
+
+    Reveal.on('slidechanged', () => {
+      setTimeout(renderMermaidOnCurrentSlide, 40);
+    });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tempo – Getting Started</title>
+
+  <!-- Local Reveal.js (submodule) -->
+  <link rel="stylesheet" href="../../../reveal.js/dist/reveal.css">
+  <link rel="stylesheet" href="../../../reveal.js/dist/theme/black.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+  <style>
+    .reveal h1, .reveal h2, .reveal h3 {
+      text-transform: none;
+      font-weight: 600;
+    }
+    .reveal .slides section {
+      text-align: left;
+    }
+    .reveal .center {
+      text-align: center;
+    }
+    .reveal .subtitle {
+      color: #aaa;
+      font-size: 0.7em;
+      margin-top: 0.3em;
+    }
+    .reveal .mermaid {
+      display: flex;
+      justify-content: center;
+      background: #111;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0 4px 0;
+    }
+    .reveal .diagram-caption {
+      text-align: center;
+      color: #777;
+      font-size: 0.48em;
+      margin-top: 4px;
+    }
+    .reveal ul, .reveal ol {
+      font-size: 0.92em;
+    }
+    .reveal code {
+      background: #222;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85em;
+    }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- Title -->
+      <section>
+        <h1 class="center">Tempo</h1>
+        <p class="center subtitle">Getting Started</p>
+
+        <aside class="notes">
+          Welcome back.
+
+          In the previous session we built the mental model.
+          Today we move from concepts into practice.
+
+          By the end of this session you should be able to connect to Tempo, obtain test funds, and send your first real payments — including transfers with memos.
+        </aside>
+      </section>
+
+      <!-- Goals -->
+      <section>
+        <h2>Goals for This Session</h2>
+        <ul>
+          <li>Understand how to connect to Tempo</li>
+          <li>Fund an account using the faucet</li>
+          <li>Send a basic TIP-20 transfer</li>
+          <li>Attach a memo to a payment</li>
+          <li>Use the explorer effectively</li>
+          <li>Recognize the difference between a normal EVM transaction and a Tempo-native experience</li>
+        </ul>
+
+        <aside class="notes">
+          These are the practical foundations.
+          Everything later in the series (TIP-20 details, Tempo Transactions, policies, agentic payments) assumes you can do these steps comfortably.
+        </aside>
+      </section>
+
+      <!-- Network overview -->
+      <section>
+        <h2>Network Basics</h2>
+        <ul>
+          <li><strong>Mainnet Chain ID:</strong> 4217</li>
+          <li><strong>Currency:</strong> USD stablecoins (no native gas token)</li>
+          <li><strong>Block time:</strong> ~0.5 seconds</li>
+          <li><strong>Finality:</strong> Deterministic, sub-second</li>
+        </ul>
+
+        <aside class="notes">
+          Key facts to remember.
+          There is no volatile native token.
+          Fees are paid in USD-denominated TIP-20 stablecoins.
+          Finality is fast and deterministic.
+        </aside>
+      </section>
+
+      <!-- Connecting -->
+      <section>
+        <h2>Connecting to Tempo</h2>
+        <div class="mermaid">
+          flowchart LR
+            Wallet[Wallet] --> RPC[RPC Endpoint]
+            RPC --> Node[Tempo Node]
+            Node --> Chain[Tempo Network]
+        </div>
+        <p class="diagram-caption">Standard EVM wallet connection flow</p>
+
+        <aside class="notes">
+          Connecting is straightforward because Tempo is EVM compatible.
+          You add the network to your wallet using the RPC endpoint and Chain ID.
+          Most common wallets work.
+        </aside>
+      </section>
+
+      <!-- What you need -->
+      <section>
+        <h2>What You Need to Connect</h2>
+        <ul>
+          <li>RPC URL</li>
+          <li>Chain ID (4217 for mainnet)</li>
+          <li>A wallet that supports custom EVM networks</li>
+          <li>Optionally: Tempo Wallet for the best native experience</li>
+        </ul>
+
+        <aside class="notes">
+          You can use MetaMask, Rabby, or other EVM wallets.
+          There is also a Tempo-native wallet experience that understands Tempo Transactions and fee tokens more cleanly.
+          For learning, either approach works.
+        </aside>
+      </section>
+
+      <!-- Getting funds -->
+      <section>
+        <h2>Getting Funds</h2>
+        <div class="mermaid">
+          flowchart LR
+            Faucet[Faucet] --> Wallet[Your Wallet]
+            Wallet --> TIP20[TIP-20 Stablecoins]
+        </div>
+        <p class="diagram-caption">Faucet provides testnet TIP-20 tokens</p>
+
+        <aside class="notes">
+          On testnet you use the official faucet to receive TIP-20 tokens.
+          These tokens are what you will use both for transfers and for paying fees.
+          Remember: there is no separate gas token to claim.
+        </aside>
+      </section>
+
+      <!-- First payment high level -->
+      <section>
+        <h2>Sending Your First Payment</h2>
+        <div class="mermaid">
+          flowchart TB
+            A[Select TIP-20 token] --> B[Enter recipient]
+            B --> C[Enter amount]
+            C --> D[Optional: attach memo]
+            D --> E[Submit transaction]
+            E --> F[Finalized in ~0.5s]
+        </div>
+        <p class="diagram-caption">Basic payment flow</p>
+
+        <aside class="notes">
+          The basic flow looks familiar if you have used any EVM chain.
+          The important differences appear in the details: fee token selection, memos, and the speed of finality.
+        </aside>
+      </section>
+
+      <!-- Memos -->
+      <section>
+        <h2>Transfer Memos</h2>
+        <p style="font-size: 1.1em; margin-top: 0.8em;">
+          TIP-20 transfers can carry a short memo.
+        </p>
+        <ul>
+          <li>Useful for invoices and reconciliation</li>
+          <li>Similar in spirit to traditional payment references</li>
+          <li>Stored onchain with the transfer</li>
+        </ul>
+
+        <aside class="notes">
+          Memos are one of the first places where Tempo feels purpose-built for payments.
+          In traditional systems every transfer usually carries a reference.
+          TIP-20 brings that idea onchain in a simple way.
+          We will go much deeper into TIP-20 later, but you should start using memos from the first payment.
+        </aside>
+      </section>
+
+      <!-- Under the hood high level -->
+      <section>
+        <h2>What Happens Under the Hood</h2>
+        <div class="mermaid">
+          flowchart TB
+            User[User signs tx] --> Fee[Fee paid in TIP-20]
+            Fee --> Lane[Payment lane]
+            Lane --> Consensus[Simplex BFT]
+            Consensus --> Final[Finalized state]
+        </div>
+        <p class="diagram-caption">Simplified path of a payment transaction</p>
+
+        <aside class="notes">
+          Even a simple transfer benefits from the design we discussed earlier.
+          The fee is paid in a stablecoin.
+          The transaction can use the payment lane.
+          Finality arrives quickly and deterministically.
+        </aside>
+      </section>
+
+      <!-- Explorer -->
+      <section>
+        <h2>Using the Explorer</h2>
+        <ul>
+          <li>Search by transaction hash</li>
+          <li>Search by address</li>
+          <li>Inspect token transfers</li>
+          <li>Observe finality and timing</li>
+        </ul>
+
+        <aside class="notes">
+          After sending a transaction, always look it up in the explorer.
+          Pay attention to how quickly it finalizes and what information is visible (including any memo).
+          Getting comfortable with the explorer early saves time later.
+        </aside>
+      </section>
+
+      <!-- Regular vs Tempo experience -->
+      <section>
+        <h2>Regular EVM vs Tempo Experience</h2>
+        <div class="mermaid">
+          flowchart LR
+            subgraph Regular
+              R1[Need native gas token]
+              R2[Probabilistic finality]
+              R3[No native memo]
+            end
+            subgraph Tempo
+              T1[Pay fees in stablecoins]
+              T2[Deterministic finality]
+              T3[Native memo support]
+            end
+        </div>
+        <p class="diagram-caption">Key experiential differences even for simple transfers</p>
+
+        <aside class="notes">
+          Even before we use advanced features such as Tempo Transactions or fee sponsorship, the basic experience already feels different.
+          You do not manage a separate gas token.
+          Finality is fast and certain.
+          Memos are available natively.
+        </aside>
+      </section>
+
+      <!-- Practical checklist -->
+      <section>
+        <h2>Practical Checklist</h2>
+        <ol>
+          <li>Add Tempo network to your wallet</li>
+          <li>Request tokens from the faucet</li>
+          <li>Send a simple TIP-20 transfer</li>
+          <li>Send a second transfer with a memo</li>
+          <li>Inspect both transactions in the explorer</li>
+        </ol>
+
+        <aside class="notes">
+          This is the minimum set of actions you should complete.
+          Do not move on until you have successfully done all five steps.
+          These actions form the foundation for every later hands-on session.
+        </aside>
+      </section>
+
+      <!-- Common pitfalls -->
+      <section>
+        <h2>Common Pitfalls</h2>
+        <ul>
+          <li>Forgetting that fees are paid in TIP-20 (not a native token)</li>
+          <li>Using the wrong chain ID</li>
+          <li>Not waiting for finality before assuming the payment is settled</li>
+          <li>Ignoring the memo field</li>
+        </ul>
+
+        <aside class="notes">
+          These are the most common early mistakes.
+          The fee token mental model is the one that takes the longest for people coming from Ethereum or typical L2s.
+        </aside>
+      </section>
+
+      <!-- Tools overview -->
+      <section>
+        <h2>Core Tools You Will Use</h2>
+        <ul>
+          <li><strong>Faucet</strong> — obtain test funds</li>
+          <li><strong>Explorer</strong> — inspect transactions and accounts</li>
+          <li><strong>Tempo Wallet</strong> — native experience (optional but recommended)</li>
+          <li><strong>RPC endpoints</strong> — connect wallets and tools</li>
+        </ul>
+
+        <aside class="notes">
+          You do not need every advanced tool yet.
+          These four are enough to get productive.
+          Later we will add Foundry, SDKs, the indexer, and the CLI.
+        </aside>
+      </section>
+
+      <!-- What we are building toward -->
+      <section>
+        <h2>Where This Leads</h2>
+        <div class="mermaid">
+          flowchart LR
+            A[Connect & Send] --> B[TIP-20 Deep Dive]
+            B --> C[Tempo Transactions]
+            C --> D[Policies, Fees, DEX, Zones]
+            D --> E[MPP & Agentic Payments]
+        </div>
+        <p class="diagram-caption">This session is the practical foundation for everything that follows</p>
+
+        <aside class="notes">
+          Today is about becoming operational.
+          Next we will go deep into the TIP-20 standard itself.
+          After that we will cover Tempo Transactions, then the rest of the protocol primitives, and eventually MPP.
+        </aside>
+      </section>
+
+      <!-- Next -->
+      <section>
+        <h2>Next Session</h2>
+        <p style="font-size: 1.15em; margin-top: 1em;">
+          TIP-20 Token Standard<br>
+          in depth.
+        </p>
+
+        <aside class="notes">
+          Next session we open the TIP-20 standard properly.
+          We will look at how it differs from ERC-20, why it exists, memos, fee payment capability, issuer controls, and how it connects to payment lanes and policies.
+        </aside>
+      </section>
+
+      <!-- Questions -->
+      <section class="center">
+        <h2>Questions</h2>
+        <p style="color: #888; margin-top: 0.9em; font-size: 0.9em;">
+          Make sure the practical flow is clear before moving on.
+        </p>
+
+        <aside class="notes">
+          Take questions now.
+          In particular, check whether anyone is still unclear about how fees are paid or how to use the faucet and explorer.
+        </aside>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Local Reveal.js -->
+  <script src="../../../reveal.js/dist/reveal.js"></script>
+  <script src="../../../reveal.js/plugin/notes/notes.js"></script>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+      fontFamily: 'inherit'
+    });
+
+    document.querySelectorAll('.mermaid').forEach(node => {
+      node.dataset.source = node.textContent;
+    });
+
+    let mermaidRenderInFlight = null;
+
+    function renderMermaidOnCurrentSlide() {
+      const slide = Reveal.getCurrentSlide();
+      if (!slide) return;
+
+      const nodes = slide.querySelectorAll('.mermaid');
+      if (nodes.length === 0) return;
+
+      if (mermaidRenderInFlight) {
+        mermaidRenderInFlight = mermaidRenderInFlight.then(() => renderMermaidOnCurrentSlide());
+        return;
+      }
+
+      nodes.forEach(node => {
+        node.textContent = node.dataset.source;
+        node.removeAttribute('data-processed');
+      });
+
+      mermaidRenderInFlight = mermaid.run({ nodes }).catch(err => {
+        console.error('mermaid render failed', err);
+      }).finally(() => {
+        mermaidRenderInFlight = null;
+      });
+    }
+
+    Reveal.initialize({
+      hash: true,
+      slideNumber: true,
+      controls: true,
+      progress: true,
+      transition: 'slide',
+      plugins: [ RevealNotes ]
+    }).then(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(renderMermaidOnCurrentSlide);
+      });
+    });
+
+    Reveal.on('ready', renderMermaidOnCurrentSlide);
+
+    Reveal.on('slidechanged', () => {
+      setTimeout(renderMermaidOnCurrentSlide, 40);
+    });
+  </script>
+</body>
+</html>

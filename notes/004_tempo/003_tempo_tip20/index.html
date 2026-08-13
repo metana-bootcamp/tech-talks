@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tempo – TIP-20 Token Standard</title>
+
+  <!-- Local Reveal.js (submodule) -->
+  <link rel="stylesheet" href="../../../reveal.js/dist/reveal.css">
+  <link rel="stylesheet" href="../../../reveal.js/dist/theme/black.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+  <style>
+    .reveal h1, .reveal h2, .reveal h3 {
+      text-transform: none;
+      font-weight: 600;
+    }
+    .reveal .slides section {
+      text-align: left;
+    }
+    .reveal .center {
+      text-align: center;
+    }
+    .reveal .subtitle {
+      color: #aaa;
+      font-size: 0.7em;
+      margin-top: 0.3em;
+    }
+    .reveal .mermaid {
+      display: flex;
+      justify-content: center;
+      background: #111;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0 4px 0;
+    }
+    .reveal .diagram-caption {
+      text-align: center;
+      color: #777;
+      font-size: 0.48em;
+      margin-top: 4px;
+    }
+    .reveal ul, .reveal ol {
+      font-size: 0.92em;
+    }
+    .reveal table {
+      font-size: 0.75em;
+      margin-top: 0.8em;
+    }
+    .reveal th, .reveal td {
+      border: 1px solid #444;
+      padding: 6px 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- Title -->
+      <section>
+        <h1 class="center">TIP-20</h1>
+        <p class="center subtitle">Tempo’s Native Token Standard for Payments</p>
+
+        <aside class="notes">
+          Welcome.
+
+          Today we go deep into TIP-20.
+          This is one of the most important protocol primitives on Tempo.
+          Almost everything else — fees, payment lanes, policies, the enshrined DEX — builds on top of it.
+        </aside>
+      </section>
+
+      <!-- Why it exists -->
+      <section>
+        <h2>Why TIP-20 Exists</h2>
+        <p style="font-size: 1.15em; margin-top: 0.9em;">
+          ERC-20 was designed as a general fungible token standard.
+        </p>
+        <p style="margin-top: 0.8em; color: #aaa;">
+          TIP-20 is designed specifically for stablecoins and payment flows.
+        </p>
+
+        <aside class="notes">
+          ERC-20 is excellent as a general standard, but it lacks native support for several things that real payment systems need:
+          memos, predictable fee payment, compliance controls, and tight integration with payment-specific blockspace.
+          TIP-20 keeps the familiar ERC-20 interface while adding the missing primitives.
+        </aside>
+      </section>
+
+      <!-- Core idea -->
+      <section>
+        <h2>Core Idea</h2>
+        <div class="mermaid">
+          flowchart LR
+            ERC20[ERC-20 Interface] --> TIP20[TIP-20]
+            TIP20 --> Fees[Fee Payment]
+            TIP20 --> Memos[Transfer Memos]
+            TIP20 --> Lanes[Payment Lanes]
+            TIP20 --> Policies[TIP-403 Policies]
+            TIP20 --> Controls[Issuer Controls]
+        </div>
+        <p class="diagram-caption">TIP-20 extends ERC-20 with payment-native capabilities</p>
+
+        <aside class="notes">
+          Think of TIP-20 as ERC-20 plus the features that payments actually require.
+          The transfer and balance interface remains familiar.
+          The new capabilities are what make the rest of the Tempo stack work cleanly.
+        </aside>
+      </section>
+
+      <!-- Comparison table -->
+      <section>
+        <h2>TIP-20 vs ERC-20</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Aspect</th>
+              <th>ERC-20</th>
+              <th>TIP-20</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Interface</td>
+              <td>Standard</td>
+              <td>Compatible</td>
+            </tr>
+            <tr>
+              <td>Fee payment</td>
+              <td>No</td>
+              <td>Yes (USD TIP-20)</td>
+            </tr>
+            <tr>
+              <td>Transfer memos</td>
+              <td>No</td>
+              <td>Yes</td>
+            </tr>
+            <tr>
+              <td>Payment lanes</td>
+              <td>No</td>
+              <td>Yes</td>
+            </tr>
+            <tr>
+              <td>Admin model</td>
+              <td>Often Ownable</td>
+              <td>Role-based</td>
+            </tr>
+            <tr>
+              <td>Compliance hooks</td>
+              <td>Custom</td>
+              <td>Native via TIP-403</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <aside class="notes">
+          The interface is deliberately familiar so existing knowledge transfers.
+          The differences are concentrated in the areas that matter for payments and regulated stablecoins.
+        </aside>
+      </section>
+
+      <!-- Feature: Fee payment -->
+      <section>
+        <h2>Feature: Fee Payment</h2>
+        <div class="mermaid">
+          flowchart LR
+            User[User holds USD TIP-20] --> Tx[Sends transaction]
+            Tx --> Fee[Fee paid in same or other USD TIP-20]
+            Fee --> AMM[Fee AMM]
+            AMM --> Validator[Validator]
+        </div>
+        <p class="diagram-caption">Any USD-denominated TIP-20 can be used to pay gas</p>
+
+        <aside class="notes">
+          This is one of the most important capabilities.
+          Only TIP-20 tokens can pay transaction fees on Tempo.
+          Because there is no native gas token, the ability of TIP-20 tokens to serve as fee tokens is fundamental to the whole design.
+        </aside>
+      </section>
+
+      <!-- Feature: Memos -->
+      <section>
+        <h2>Feature: Transfer Memos</h2>
+        <ul>
+          <li>Short onchain reference attached to a transfer</li>
+          <li>Useful for invoices, reconciliation, and payment references</li>
+          <li>Mirrors traditional payment systems more closely than plain ERC-20</li>
+        </ul>
+
+        <aside class="notes">
+          In traditional finance almost every payment carries a reference.
+          TIP-20 makes this a first-class feature.
+          When you send a transfer you can attach a memo that is recorded with the transfer.
+          This is extremely useful for businesses and for any system that needs to match onchain payments to offchain records.
+        </aside>
+      </section>
+
+      <!-- Feature: Payment lanes -->
+      <section>
+        <h2>Feature: Payment Lanes</h2>
+        <div class="mermaid">
+          flowchart TD
+            subgraph Block
+              PL[Payment Lane<br/>TIP-20 transfers]
+              GL[General Lane]
+            end
+            TIP20Tx[TIP-20 payment tx] --> PL
+            OtherTx[Other transactions] --> GL
+        </div>
+        <p class="diagram-caption">Eligible TIP-20 transfers receive reserved blockspace</p>
+
+        <aside class="notes">
+          TIP-20 transfers that qualify as payments can use the dedicated payment lanes.
+          This is how Tempo keeps payment traffic predictable even when the network is busy with other activity.
+          The token standard and the blockspace design are tightly linked.
+        </aside>
+      </section>
+
+      <!-- Feature: Issuer controls -->
+      <section>
+        <h2>Feature: Issuer Controls</h2>
+        <ul>
+          <li>Role-based access control instead of a single owner</li>
+          <li>Roles for minting, burning, pausing, and administration</li>
+          <li>Designed for controlled tokens such as stablecoins</li>
+        </ul>
+
+        <aside class="notes">
+          Real stablecoins need careful control over minting and burning.
+          TIP-20 uses role-based access control rather than a simple Ownable pattern.
+          This matches the operational needs of issuers more closely.
+        </aside>
+      </section>
+
+      <!-- Feature: Policies -->
+      <section>
+        <h2>Feature: Policy Integration</h2>
+        <div class="mermaid">
+          flowchart LR
+            TIP20[TIP-20 Token] --> Registry[TIP-403 Policy Registry]
+            Registry --> Check[Transfer policy check]
+            Check --> Allow[Allow or block transfer]
+        </div>
+        <p class="diagram-caption">TIP-20 tokens can enforce compliance rules via TIP-403</p>
+
+        <aside class="notes">
+          TIP-20 integrates natively with the TIP-403 policy system.
+          A token can reference a policy that controls who is allowed to send or receive.
+          This is the foundation for compliance-oriented stablecoin behavior.
+          We will study TIP-403 in more depth in a later session.
+        </aside>
+      </section>
+
+      <!-- Virtual addresses -->
+      <section>
+        <h2>Virtual Addresses</h2>
+        <p style="font-size: 1.1em; margin-top: 0.8em;">
+          Operators can issue unique deposit addresses that still route funds to a master account.
+        </p>
+        <ul>
+          <li>Useful for invoices and customer-specific addresses</li>
+          <li>Keeps accounting clean while preserving a single destination</li>
+        </ul>
+
+        <aside class="notes">
+          Virtual addresses are another payment-oriented feature.
+          Instead of giving every customer the same deposit address, an operator can issue distinct addresses that still consolidate to one master wallet.
+          This helps with reconciliation and user experience.
+        </aside>
+      </section>
+
+      <!-- How it powers the stack -->
+      <section>
+        <h2>How TIP-20 Powers the Stack</h2>
+        <div class="mermaid">
+          flowchart TB
+            TIP20[TIP-20]
+            TIP20 --> Fees[Fee System]
+            TIP20 --> Lanes[Payment Lanes]
+            TIP20 --> DEX[Enshrined Stablecoin DEX]
+            TIP20 --> Policies[TIP-403 Policies]
+            TIP20 --> Payments[Payment UX]
+        </div>
+        <p class="diagram-caption">TIP-20 is the common foundation for multiple protocol features</p>
+
+        <aside class="notes">
+          Once you understand TIP-20, many other parts of Tempo become clearer.
+          The fee system depends on it.
+          Payment lanes depend on it.
+          The enshrined DEX is built around it.
+          Policies attach to it.
+          It is the central token primitive of the chain.
+        </aside>
+      </section>
+
+      <!-- Issuance high level -->
+      <section>
+        <h2>Issuance (High Level)</h2>
+        <ul>
+          <li>New TIP-20 tokens are created via the TIP-20 Factory</li>
+          <li>Issuers receive the appropriate roles</li>
+          <li>Tokens can then be configured with policies and other parameters</li>
+        </ul>
+
+        <aside class="notes">
+          We are not going into full issuance mechanics today.
+          The important point is that TIP-20 tokens are created through a canonical factory rather than being ad-hoc ERC-20 deployments.
+          This keeps behavior consistent across the ecosystem.
+        </aside>
+      </section>
+
+      <!-- Developer implications -->
+      <section>
+        <h2>Implications for Developers</h2>
+        <ul>
+          <li>You can treat balances and transfers similarly to ERC-20</li>
+          <li>You should actively use memos where references matter</li>
+          <li>You must understand that fee payment depends on TIP-20</li>
+          <li>Compliance and receive rules may apply via policies</li>
+        </ul>
+
+        <aside class="notes">
+          From a Solidity developer’s point of view the day-to-day interface feels familiar.
+          The differences show up when you care about fees, payment semantics, reconciliation, and compliance.
+          Those are exactly the areas Tempo optimizes for.
+        </aside>
+      </section>
+
+      <!-- Mental model -->
+      <section>
+        <h2>Mental Model</h2>
+        <p style="font-size: 1.2em; margin-top: 0.9em;">
+          TIP-20 is not just “another token standard.”
+        </p>
+        <p style="font-size: 1.15em; margin-top: 0.9em;">
+          It is the token standard that makes Tempo’s payment design possible.
+        </p>
+
+        <aside class="notes">
+          Hold on to this framing.
+          When we later discuss fees, lanes, the DEX, or policies, the conversation will keep coming back to TIP-20.
+        </aside>
+      </section>
+
+      <!-- Next -->
+      <section>
+        <h2>Next Session</h2>
+        <p style="font-size: 1.15em; margin-top: 1em;">
+          Tempo Transactions<br>
+          in depth.
+        </p>
+
+        <aside class="notes">
+          Next we will study the native transaction type used on Tempo.
+          We will cover batching, fee sponsorship, concurrent nonces, access keys, scheduled transactions, and why Tempo Transactions are strongly preferred over classic Ethereum transactions.
+        </aside>
+      </section>
+
+      <!-- Questions -->
+      <section class="center">
+        <h2>Questions</h2>
+        <p style="color: #888; margin-top: 0.9em; font-size: 0.9em;">
+          Make sure the role of TIP-20 is clear before we move on.
+        </p>
+
+        <aside class="notes">
+          Take questions now.
+          In particular, check whether the relationship between TIP-20, fees, memos, and payment lanes is clear.
+        </aside>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Local Reveal.js -->
+  <script src="../../../reveal.js/dist/reveal.js"></script>
+  <script src="../../../reveal.js/plugin/notes/notes.js"></script>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+      fontFamily: 'inherit'
+    });
+
+    document.querySelectorAll('.mermaid').forEach(node => {
+      node.dataset.source = node.textContent;
+    });
+
+    let mermaidRenderInFlight = null;
+
+    function renderMermaidOnCurrentSlide() {
+      const slide = Reveal.getCurrentSlide();
+      if (!slide) return;
+
+      const nodes = slide.querySelectorAll('.mermaid');
+      if (nodes.length === 0) return;
+
+      if (mermaidRenderInFlight) {
+        mermaidRenderInFlight = mermaidRenderInFlight.then(() => renderMermaidOnCurrentSlide());
+        return;
+      }
+
+      nodes.forEach(node => {
+        node.textContent = node.dataset.source;
+        node.removeAttribute('data-processed');
+      });
+
+      mermaidRenderInFlight = mermaid.run({ nodes }).catch(err => {
+        console.error('mermaid render failed', err);
+      }).finally(() => {
+        mermaidRenderInFlight = null;
+      });
+    }
+
+    Reveal.initialize({
+      hash: true,
+      slideNumber: true,
+      controls: true,
+      progress: true,
+      transition: 'slide',
+      plugins: [ RevealNotes ]
+    }).then(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(renderMermaidOnCurrentSlide);
+      });
+    });
+
+    Reveal.on('ready', renderMermaidOnCurrentSlide);
+
+    Reveal.on('slidechanged', () => {
+      setTimeout(renderMermaidOnCurrentSlide, 40);
+    });
+  </script>
+</body>
+</html>
