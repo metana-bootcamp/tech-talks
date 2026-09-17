@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tempo – TIP-403 Policies</title>
+
+  <!-- Local Reveal.js (submodule) -->
+  <link rel="stylesheet" href="../../../reveal.js/dist/reveal.css">
+  <link rel="stylesheet" href="../../../reveal.js/dist/theme/black.css">
+
+  <script>
+    function loadMermaidFallback() {
+      if (window.mermaid || document.getElementById('mermaid-fallback-script')) return;
+      const script = document.createElement('script');
+      script.id = 'mermaid-fallback-script';
+      script.src = 'https://unpkg.com/mermaid@10/dist/mermaid.min.js';
+      document.head.appendChild(script);
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" onerror="loadMermaidFallback()"></script>
+
+  <style>
+    .reveal h1, .reveal h2, .reveal h3 {
+      text-transform: none;
+      font-weight: 600;
+    }
+    .reveal .slides section {
+      text-align: left;
+    }
+    .reveal .center {
+      text-align: center;
+    }
+    .reveal .subtitle {
+      color: #aaa;
+      font-size: 0.7em;
+      margin-top: 0.3em;
+    }
+    .reveal .mermaid {
+      display: flex;
+      justify-content: center;
+      background: #111;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0 4px 0;
+    }
+    .reveal .diagram-caption {
+      text-align: center;
+      color: #777;
+      font-size: 0.48em;
+      margin-top: 4px;
+    }
+    .reveal ul, .reveal ol {
+      font-size: 0.92em;
+    }
+    .reveal code {
+      background: #222;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85em;
+    }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <section>
+        <h1 class="center">TIP-403</h1>
+        <p class="center subtitle">Policies, Compliance &amp; Receive Controls</p>
+
+        <aside class="notes">
+          Welcome.
+
+          Today we study the policy system on Tempo.
+          TIP-403 is how the protocol attaches access control and compliance rules to TIP-20 tokens — and later how individual accounts can control what they are willing to receive.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Why Policies Exist</h2>
+        <p style="font-size: 1.15em; margin-top: 0.9em;">
+          Real stablecoins need more than mint and transfer.
+        </p>
+        <ul>
+          <li>Who is allowed to send?</li>
+          <li>Who is allowed to receive?</li>
+          <li>Which tokens should an account accept?</li>
+          <li>How do issuers enforce this consistently?</li>
+        </ul>
+
+        <aside class="notes">
+          If every issuer implemented its own allowlist or denylist logic, behavior would fragment.
+          Tempo solves this with a shared registry that tokens can inherit instead of reinventing.
+        </aside>
+      </section>
+
+      <section>
+        <h2>What TIP-403 Is</h2>
+        <ul>
+          <li>A shared <strong>policy registry</strong></li>
+          <li>Policies are created once and reused across tokens</li>
+          <li>TIP-20 tokens check the registry on transfers</li>
+          <li>Registry address: <code>0x403c0000…0000</code></li>
+        </ul>
+
+        <aside class="notes">
+          The key design choice is reuse.
+          A policy is an object with an ID, a type, an admin, and a set of addresses.
+          Multiple TIP-20 tokens can point at the same policy.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Two Layers of Control</h2>
+        <div class="mermaid">
+          flowchart TB
+            Token[TIP-20 token policy] --> Check1[Can this sender and recipient use the token?]
+            Account[Account receive policy] --> Check2[Does this receiver want this token and sender?]
+            Check1 --> Check2
+        </div>
+        <p class="diagram-caption">Token policy runs first. Receive policy runs after.</p>
+
+        <aside class="notes">
+          Keep these two layers separate in your head.
+          The token policy is issuer-controlled compliance.
+          The receive policy is receiver-controlled preference.
+          They solve different problems.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Policy Types</h2>
+        <ul>
+          <li><strong>Whitelist</strong> — only listed addresses may transfer</li>
+          <li><strong>Blacklist</strong> — listed addresses are blocked</li>
+          <li><strong>Compound</strong> — more advanced combinations exist at the protocol level, but they are not valid for receive policies</li>
+        </ul>
+
+        <aside class="notes">
+          For teaching and most application work, start with whitelist and blacklist.
+          Those two cover the majority of issuer compliance patterns.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Built-in Policies</h2>
+        <ul>
+          <li><code>policyId = 0</code> — always reject</li>
+          <li><code>policyId = 1</code> — always allow</li>
+          <li>Custom policies start at <code>policyId = 2</code></li>
+        </ul>
+
+        <aside class="notes">
+          These two built-ins are important defaults.
+          Policy 1 is the open case.
+          Policy 0 is the fully closed case.
+          Custom policies are created from 2 onward.
+        </aside>
+      </section>
+
+      <section>
+        <h2>How a Token Uses a Policy</h2>
+        <div class="mermaid">
+          flowchart LR
+            Admin["Token admin"] --> Bind["Bind policyId to TIP-20"]
+            Tx["Transfer or mint"] --> Check["isAuthorized(sender, recipient)"]
+            Check -->|"pass"| Pass["Transfer proceeds"]
+            Check -->|"fail"| Fail["Call reverts"]
+        </div>
+        <p class="diagram-caption">Token-level policy failure reverts the call</p>
+
+        <aside class="notes">
+          The token stores the current policy ID.
+          On transfer, it checks both sender and recipient against that policy.
+          If either fails, the call reverts.
+          Only the token admin can change which policy the token uses.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Receive Policies</h2>
+        <p style="margin-top: 0.6em;">
+          An account can define what it is willing to accept.
+        </p>
+        <ul>
+          <li>Which senders may send to it</li>
+          <li>Which TIP-20 tokens it accepts</li>
+          <li>Who can recover funds if a transfer is held</li>
+        </ul>
+
+        <aside class="notes">
+          This is the T6-era capability and it is easy to confuse with token policy.
+          Receive policies belong to the receiving address, not to the token issuer.
+          A regulated entity, a treasury, or a user can refuse unwanted deposits.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Receive Policy Shape</h2>
+        <pre><code>ReceivePolicy(account) = (
+  senderPolicyId,
+  tokenFilterId,
+  recoveryAuthority
+)</code></pre>
+        <p style="margin-top: 0.8em; color: #aaa;">
+          Sender and token filters must be built-in 0/1 or a simple whitelist or blacklist.
+        </p>
+
+        <aside class="notes">
+          Three fields.
+          senderPolicyId controls who can send.
+          tokenFilterId controls which tokens are accepted.
+          recoveryAuthority controls who can later claim blocked receipts.
+        </aside>
+      </section>
+
+      <section>
+        <h2>What Happens When a Receive Policy Blocks</h2>
+        <div class="mermaid">
+          flowchart TB
+            Send[Sender submits transfer or mint] --> TokenCheck[Token TIP-403 check]
+            TokenCheck -->|fail| Revert[Revert]
+            TokenCheck -->|pass| RecvCheck[Receive policy check]
+            RecvCheck -->|pass| Credit[Funds credited normally]
+            RecvCheck -->|fail| Guard[ReceivePolicyGuard holds funds]
+        </div>
+        <p class="diagram-caption">Blocked inbound funds are held, not silently lost</p>
+
+        <aside class="notes">
+          This is a crucial behavioral difference.
+          Token-policy failure reverts.
+          Receive-policy failure does not revert the whole call.
+          Delivery is redirected to ReceivePolicyGuard and a receipt is recorded so the funds can be recovered or rerouted later.
+        </aside>
+      </section>
+
+      <section>
+        <h2>ReceivePolicyGuard</h2>
+        <ul>
+          <li>Protocol precompile at <code>0xB10C0000…0000</code></li>
+          <li>Records a receipt for each blocked transfer or mint</li>
+          <li>Recovery authority can later claim or reroute</li>
+        </ul>
+
+        <aside class="notes">
+          Think of it as a holding area for unwanted inbound value.
+          The sender does not need to know about the receiver’s policy in advance.
+          If the send is blocked, the protocol preserves the funds instead of reverting or burning them.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Enforcement Order</h2>
+        <ol>
+          <li>Token TIP-403 policy runs first</li>
+          <li>If that fails, the transaction reverts</li>
+          <li>If it passes, the receiver’s receive policy is checked</li>
+          <li>If that fails, funds go to the guard</li>
+        </ol>
+
+        <aside class="notes">
+          Repeat this order until it is automatic.
+          Issuer rules are hard constraints.
+          Receiver rules are acceptance preferences with a recovery path.
+        </aside>
+      </section>
+
+      <section>
+        <h2>When to Use Which</h2>
+        <ul>
+          <li><strong>Token policy</strong> — issuer compliance, KYC’d counterparties, sanctioned-address blocking</li>
+          <li><strong>Receive policy</strong> — treasury only accepts certain tokens, account rejects unknown senders, regulated receiver constraints</li>
+        </ul>
+
+        <aside class="notes">
+          If the issuer must prevent a transfer from happening at all, use a token policy.
+          If the receiver simply does not want the incoming asset or sender, use a receive policy.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Implications for Developers</h2>
+        <ul>
+          <li>Do not assume every transfer credits the recipient immediately</li>
+          <li>Index guard receipts if you operate wallets or payment systems</li>
+          <li>Warn users when a send is likely to be held</li>
+          <li>Reuse policies instead of embedding custom allowlists in every token</li>
+        </ul>
+
+        <aside class="notes">
+          For app builders this is operational, not just theoretical.
+          Explorers, wallets, and payment processors should understand both revert cases and held-receipt cases.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Mental Model</h2>
+        <p style="font-size: 1.15em; margin-top: 0.9em;">
+          TIP-20 moves value.
+        </p>
+        <p style="font-size: 1.15em; margin-top: 0.9em;">
+          TIP-403 decides whether that movement is allowed.
+        </p>
+        <p style="font-size: 1.15em; margin-top: 0.9em;">
+          Receive policies decide whether the destination wants it.
+        </p>
+
+        <aside class="notes">
+          That is the complete picture.
+          Token standard, then issuer policy, then receiver preference.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Next Session</h2>
+        <p style="font-size: 1.15em; margin-top: 1em;">
+          Enshrined Stablecoin DEX<br>
+          in depth.
+        </p>
+
+        <aside class="notes">
+          Next we will look at the protocol-native exchange for TIP-20 stablecoins: quote tokens, swaps, limit orders, flip orders, and how policies still apply when tokens trade.
+        </aside>
+      </section>
+
+      <section class="center">
+        <h2>Questions</h2>
+        <p style="color: #888; margin-top: 0.9em; font-size: 0.9em;">
+          Make sure token policy vs receive policy is clear.
+        </p>
+
+        <aside class="notes">
+          Take questions now.
+          The most common confusion is treating receive-policy holds as the same thing as a reverted transfer.
+          They are not.
+        </aside>
+      </section>
+
+    </div>
+  </div>
+
+  <script src="../../../reveal.js/dist/reveal.js"></script>
+  <script src="../../../reveal.js/plugin/notes/notes.js"></script>
+
+  <script>
+    function initializeReveal(renderMermaidOnCurrentSlide) {
+      Reveal.initialize({
+        hash: true,
+        slideNumber: true,
+        controls: true,
+        progress: true,
+        transition: 'slide',
+        plugins: [ RevealNotes ]
+      }).then(() => {
+        void renderMermaidOnCurrentSlide();
+      });
+
+      Reveal.on('slidechanged', () => {
+        setTimeout(() => {
+          void renderMermaidOnCurrentSlide();
+        }, 40);
+      });
+    }
+
+    function bootstrapWithMermaid() {
+      if (!window.mermaid) return false;
+
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'dark',
+        securityLevel: 'loose',
+        fontFamily: 'inherit'
+      });
+
+      // Cache original Mermaid definitions so re-rendering works when revisiting slides.
+      document.querySelectorAll('.mermaid').forEach((node) => {
+        if (!node.dataset.mermaidSource) {
+          node.dataset.mermaidSource = node.textContent.trim();
+        }
+      });
+
+      let mermaidRenderSeq = 0;
+
+      async function renderMermaidOnCurrentSlide() {
+        const slide = Reveal.getCurrentSlide();
+        if (!slide) return;
+
+        const nodes = Array.from(slide.querySelectorAll('.mermaid'));
+        for (const node of nodes) {
+          const source = (node.dataset.mermaidSource || '').trim();
+          if (!source) continue;
+
+          try {
+            const id = `mermaid-${Date.now()}-${mermaidRenderSeq++}`;
+            const { svg, bindFunctions } = await mermaid.render(id, source);
+            node.innerHTML = svg;
+            if (typeof bindFunctions === 'function') bindFunctions(node);
+          } catch (error) {
+            console.error('Mermaid render failed:', error);
+            node.innerHTML = `<pre style="color:#f88; font-size:0.5em; white-space:pre-wrap;">${source}</pre>`;
+          }
+        }
+      }
+
+      initializeReveal(renderMermaidOnCurrentSlide);
+      return true;
+    }
+
+    let bootstrapAttempts = 0;
+    (function waitForMermaid() {
+      if (bootstrapWithMermaid()) return;
+
+      bootstrapAttempts += 1;
+      if (bootstrapAttempts === 1) loadMermaidFallback();
+
+      if (bootstrapAttempts > 40) {
+        console.error('Mermaid failed to load; starting Reveal without Mermaid rendering.');
+        initializeReveal(async () => {});
+        return;
+      }
+
+      setTimeout(waitForMermaid, 100);
+    })();
+  </script>
+</body>
+</html>

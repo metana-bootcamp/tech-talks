@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tempo – Enshrined Stablecoin DEX</title>
+
+  <link rel="stylesheet" href="../../../reveal.js/dist/reveal.css">
+  <link rel="stylesheet" href="../../../reveal.js/dist/theme/black.css">
+  <script>
+    function loadMermaidFallback() {
+      if (window.mermaid || document.getElementById('mermaid-fallback-script')) return;
+      const script = document.createElement('script');
+      script.id = 'mermaid-fallback-script';
+      script.src = 'https://unpkg.com/mermaid@10/dist/mermaid.min.js';
+      document.head.appendChild(script);
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" onerror="loadMermaidFallback()"></script>
+
+  <style>
+    .reveal h1, .reveal h2, .reveal h3 { text-transform: none; font-weight: 600; }
+    .reveal .slides section { text-align: left; }
+    .reveal .center { text-align: center; }
+    .reveal .subtitle { color: #aaa; font-size: 0.68em; margin-top: 0.25em; }
+    .reveal .mermaid {
+      display: flex; justify-content: center; background: #111;
+      border-radius: 6px; padding: 8px 12px; margin: 8px 0 4px 0;
+    }
+    .reveal .diagram-caption { text-align: center; color: #777; font-size: 0.46em; margin-top: 4px; }
+    .reveal ul, .reveal ol { font-size: 0.88em; }
+    .reveal code, .reveal pre code {
+      background: #1c1c1c; padding: 2px 6px; border-radius: 4px; font-size: 0.78em;
+    }
+    .reveal pre { font-size: 0.48em; width: 100%; }
+    .reveal table { font-size: 0.68em; margin-top: 0.5em; }
+    .reveal th, .reveal td { border: 1px solid #444; padding: 5px 8px; }
+
+    /* Keep this dense diagram slide comfortably inside common laptop viewports. */
+    .reveal section.compact-flow h2 { font-size: 1.3em; margin-bottom: 0.2em; }
+    .reveal section.compact-flow .mermaid { padding: 4px 8px; margin: 4px 0 2px 0; }
+    .reveal section.compact-flow .diagram-caption { font-size: 0.4em; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <section>
+        <h1 class="center">Enshrined Stablecoin DEX</h1>
+        <p class="center subtitle">Protocol-native orderbook for TIP-20 interoperability</p>
+        <aside class="notes">
+          This session is for developers who already understand EVM orderbooks, AMMs, and token standards.
+          We are not covering “what is a DEX.”
+          We are covering why Tempo put an orderbook in the protocol, how it actually works, and what you must get right when integrating it.
+        </aside>
+      </section>
+
+      <section>
+        <h2>What You Should Leave With</h2>
+        <ul>
+          <li>Why this is an enshrined orderbook, not Uniswap-in-a-precompile</li>
+          <li>How quote-token routing creates a single path between any two USD TIP-20s</li>
+          <li>Exact order types, escrow, matching, and flip semantics</li>
+          <li>How TIP-403 still gates makers, takers, and the DEX itself</li>
+          <li>Which APIs to call, what can revert, and what fails silently</li>
+        </ul>
+        <aside class="notes">
+          If someone already knows how to integrate a Uniswap pool, this session should still be worth their time because the primitive is different: ticks, quote-token trees, flip orders, internal balances, and policy-aware trading.
+        </aside>
+      </section>
+
+      <section>
+        <h2>The Design Constraint</h2>
+        <p style="font-size: 1.1em; margin-top: 0.7em;">
+          Payments need cheap conversion between USD stablecoins.
+        </p>
+        <ul>
+          <li>Many issuers, one currency unit</li>
+          <li>Fragmented pairs destroy liquidity</li>
+          <li>Application-level routers add failure modes</li>
+        </ul>
+        <aside class="notes">
+          Tempo assumes a world of many USD stablecoins, not one canonical dollar token.
+          If every pair is a separate pool, liquidity fragments and routing becomes a product problem.
+          The protocol instead forces a tree of quote relationships so there is one path between any two tokens.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Contract Surface</h2>
+        <ul>
+          <li>Singleton precompile: <code>0xdec0000000000000000000000000000000000000</code></li>
+          <li>USD TIP-20 to USD TIP-20 only</li>
+          <li>Onchain orderbook with price-time priority</li>
+          <li>No per-pair contract deployment</li>
+        </ul>
+        <aside class="notes">
+          Treat this like a system contract, similar in status to the TIP-20 factory or Fee Manager.
+          You do not deploy a pool. You create a pair against the token’s quote token and then place or take liquidity.
+        </aside>
+      </section>
+
+      <section>
+        <h2>DEX vs Fee AMM — Do Not Mix These</h2>
+        <table>
+          <thead>
+            <tr><th></th><th>Stablecoin DEX</th><th>Fee AMM</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Job</td><td>User/app value conversion</td><td>Validator fee conversion</td></tr>
+            <tr><td>Initiator</td><td>Caller</td><td>Protocol</td></tr>
+            <tr><td>Price</td><td>Orderbook, market-driven</td><td>Fixed 0.9970</td></tr>
+            <tr><td>Liquidity</td><td>Limit + flip orders</td><td>Per-pair fee pools</td></tr>
+            <tr><td>Address</td><td><code>0xdec0…</code></td><td><code>0xfeec…</code></td></tr>
+          </tbody>
+        </table>
+        <aside class="notes">
+          This is the most important disambiguation in the session.
+          If you are swapping user value, you are on the DEX.
+          If you are paying gas in a non-validator token, you are on the Fee AMM.
+          They share the “stablecoin conversion” vibe and almost nothing else.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Quote Tokens Form a Tree</h2>
+        <div class="mermaid">
+          flowchart TB
+            P[pathUSD<br/>no quote token]
+            A[USDX] --> P
+            B[USDY] --> P
+            C[USDZ] --> A
+        </div>
+        <p class="diagram-caption">One quote per token. One route between any two tokens.</p>
+        <aside class="notes">
+          Each TIP-20 declares exactly one quote token.
+          pathUSD is the optional neutral root: first deployed USD token, no quote of its own, fallback fee token.
+          USDX to USDY routes USDX → pathUSD → USDY in one transaction.
+          That is deliberate. It concentrates liquidity instead of creating an NXN pair matrix.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Why the Tree Matters</h2>
+        <ul>
+          <li>Routing is deterministic — no competing paths</li>
+          <li>Thin pairs still connect through shared quote liquidity</li>
+          <li>Cross-stablecoin payments can be atomic</li>
+          <li>Users and merchants need not hold the intermediate token</li>
+        </ul>
+        <aside class="notes">
+          Walk a payment example.
+          Alice holds USDX. Merchant wants USDY.
+          Market makers quote both against pathUSD.
+          One swapExactAmountIn can traverse both hops.
+          Alice never intended to hold pathUSD. It is routing infrastructure.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Creating a Pair</h2>
+        <pre><code>createPair(address base)</code></pre>
+        <ul>
+          <li>Pair is always <code>base</code> against <code>base.quoteToken()</code></li>
+          <li>Reverts if the token is not USD-denominated</li>
+          <li>Reverts if the pair already exists</li>
+          <li>Pair key is order-independent: <code>pairKey(A, B)</code></li>
+        </ul>
+        <aside class="notes">
+          You do not pass both tokens.
+          The quote is metadata on the TIP-20.
+          That is how the protocol keeps the graph a tree instead of letting apps invent arbitrary pairs.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Price Grid</h2>
+        <ul>
+          <li><code>PRICE_SCALE = 100_000</code></li>
+          <li><code>TICK_SPACING = 10</code> → 1 bp grid</li>
+          <li><code>MIN_TICK = -2000</code>, <code>MAX_TICK = 2000</code> → ±2%</li>
+          <li>Tick must be divisible by 10</li>
+          <li>Example: $1.0000 → 0, $0.9990 → -10, $1.0010 → 10</li>
+        </ul>
+        <aside class="notes">
+          This is a tight band by design.
+          These are USD stablecoins. A ±2% book is the relevant market, not a 50% AMM range.
+          If you try to place off-grid or out-of-range ticks, placement reverts.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Book Structure</h2>
+        <div class="mermaid">
+          flowchart TB
+            Pair[Pair] --> Bids[Bid ticks]
+            Pair --> Asks[Ask ticks]
+            Bids --> Q1[FIFO queue at tick]
+            Asks --> Q2[FIFO queue at tick]
+        </div>
+        <p class="diagram-caption">Bitmaps find live ticks. Queues are FIFO inside a tick.</p>
+        <aside class="notes">
+          Internally this looks more like a concentrated-liquidity tick bitmap plus a classic CLOB queue than like x*y=k.
+          Each pair tracks bestBidTick and bestAskTick.
+          A tick de-initializes when its liquidity hits zero.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Three Order Behaviors</h2>
+        <table>
+          <thead>
+            <tr><th>Type</th><th>When it executes</th><th>What it leaves behind</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Swap / market</td><td>Immediately</td><td>Nothing resting</td></tr>
+            <tr><td>Limit</td><td>When matched</td><td>Resting order until fill or cancel</td></tr>
+            <tr><td>Flip</td><td>When matched</td><td>Same orderId rewritten on the other side</td></tr>
+          </tbody>
+        </table>
+        <aside class="notes">
+          Developers should choose based on intent.
+          Taker flow: swap.
+          Passive one-sided quote: limit.
+          Standing two-sided convertibility: flip.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Limit Placement and Escrow</h2>
+        <pre><code>place(token, amount, isBid, tick) → orderId</code></pre>
+        <ul>
+          <li>Bid escrows quote at the tick price</li>
+          <li>Ask escrows base</li>
+          <li>Prefers internal DEX balance, then <code>transferFrom</code></li>
+          <li>Enqueued FIFO at that tick</li>
+        </ul>
+        <aside class="notes">
+          Escrow is the part people miss.
+          A bid is not “I hope to buy later with wallet funds.”
+          The quote is locked now.
+          Cancel returns escrow to the maker’s internal balance.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Flip Semantics</h2>
+        <pre><code>placeFlip(token, amount, isBid, tick, flipTick) → orderId</code></pre>
+        <ul>
+          <li>Acts as a normal resting order until fully filled</li>
+          <li>Then rewritten in place at <code>flipTick</code></li>
+          <li>Same <code>orderId</code> — it does not consume a new ID</li>
+          <li>Bids: <code>flipTick &gt;= tick</code>; asks: <code>flipTick &lt;= tick</code></li>
+          <li>Same-tick flips are valid</li>
+        </ul>
+        <aside class="notes">
+          Same-tick flips are the issuer convertibility trick.
+          Place both sides at tick 0 and the book keeps offering 1:1-ish convertibility as fills flip back and forth.
+          Flip emits OrderFlipped, not OrderPlaced.
+        </aside>
+      </section>
+
+      <section class="compact-flow">
+        <h2>Silent Failure on Flip Funding</h2>
+        <div class="mermaid">
+          flowchart TB
+            Fill[Full fill] --> Bal{Internal balance<br/>enough?}
+            Bal -->|yes| Flip[Rewrite on<br/>other side]
+            Bal -->|no| Stop[No flip]
+        </div>
+        <p class="diagram-caption">No transferFrom fallback on flip. This is easy to miss.</p>
+        <aside class="notes">
+          Initial placement can pull from the wallet.
+          A later flip cannot.
+          If the maker withdrew credits or never left enough internal balance, the order dies instead of flipping.
+          If you are building an LP bot, this is a production bug waiting to happen.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Swap APIs</h2>
+        <pre><code>swapExactAmountIn(tokenIn, tokenOut, amountIn, minAmountOut)
+swapExactAmountOut(tokenIn, tokenOut, amountOut, maxAmountIn)
+quoteSwapExactAmountIn(...)
+quoteSwapExactAmountOut(...)</code></pre>
+        <aside class="notes">
+          Always quote first in production UIs and agents.
+          Quote functions are view simulations and revert on insufficient liquidity.
+          Then submit the swap with an explicit slippage bound.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Swap Execution Path</h2>
+        <ol>
+          <li>Read caller’s internal DEX balance</li>
+          <li>Pull wallet shortfall if needed</li>
+          <li>If no direct pair, walk the unique quote-token path</li>
+          <li>Consume book in price-time priority</li>
+          <li>Credit makers internally at tick price</li>
+          <li>Revert on slippage or missing liquidity</li>
+          <li>Send output to the taker</li>
+        </ol>
+        <aside class="notes">
+          Multi-hop is protocol routing, not an external aggregator.
+          Because the quote graph is a tree, the path is unique.
+          That removes a class of router bugs, but it also means a missing hop is a hard failure, not “try another route.”
+        </aside>
+      </section>
+
+      <section>
+        <h2>Gas Scales With Book Work</h2>
+        <ul>
+          <li>Base cost: setup and token movement</li>
+          <li>Per order filled</li>
+          <li>Per tick crossed</li>
+          <li>Per flip triggered</li>
+        </ul>
+        <p style="margin-top: 0.7em; color: #aaa;">
+          Large size through a thin book is expensive. That is expected.
+        </p>
+        <aside class="notes">
+          Do not promise constant-gas swaps.
+          If an agent or payment flow must stay inside a tight gas budget, quote first and cap the size or require deeper books.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Internal Balances Are Part of the Protocol</h2>
+        <pre><code>balanceOf(user, token)
+withdraw(token, amount)</code></pre>
+        <ul>
+          <li>Fills credit the maker internally</li>
+          <li>Later placements spend internal balance first</li>
+          <li>Withdraw is explicit</li>
+        </ul>
+        <aside class="notes">
+          If you index only ERC-20 Transfer events you will mis-account LPs.
+          Maker proceeds often never leave the DEX until withdraw.
+          Wallet UIs that ignore internal balances will look like funds disappeared.
+        </aside>
+      </section>
+
+      <section>
+        <h2>TIP-403 on the Book</h2>
+        <div class="mermaid">
+          flowchart TB
+            Place[place / placeFlip / swap] --> M[Maker authorized<br/>on base and quote?]
+            M --> D[DEX contract authorized<br/>by token policies?]
+            D --> Ok[Proceed]
+            M -->|no| Rev[Revert]
+            D -->|no| Rev
+        </div>
+        <p class="diagram-caption">Issuers can keep a token off the DEX entirely</p>
+        <aside class="notes">
+          The DEX is not a compliance bypass.
+          Maker must be allowed to transfer both assets.
+          The DEX address itself must be allowed by the token policy.
+          That second check is how an issuer opts a token out of public trading.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Stale Orders</h2>
+        <pre><code>cancel(orderId)            // owner
+cancelStaleOrder(orderId)  // anyone, iff maker is no longer authorized</code></pre>
+        <ul>
+          <li>If a maker gets blacklisted, their resting order can be cleaned up</li>
+          <li>Escrow returns to the maker’s internal balance</li>
+          <li>Reverts with <code>ORDER_NOT_STALE</code> if the maker is still authorized</li>
+        </ul>
+        <aside class="notes">
+          This is the cleanup hatch for compliance changes after placement.
+          Permissionless cancel is not a griefing tool against valid makers.
+          It only works when TIP-403 now forbids the maker.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Events You Should Index</h2>
+        <pre><code>PairCreated(key, base, quote)
+OrderPlaced(orderId, maker, token, amount, isBid, tick, isFlipOrder, flipTick)
+OrderFlipped(orderId, maker, token, amount, isBid, tick, flipTick)
+OrderFilled(orderId, maker, taker, amountFilled, partialFill)
+OrderCancelled(orderId)</code></pre>
+        <aside class="notes">
+          If you are building an indexer, explorer, or LP dashboard, OrderFlipped is mandatory.
+          Treating a flip as a cancel-plus-new-place will break order identity and PnL.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Integration Checklist</h2>
+        <ol>
+          <li>Know the token’s quote token before you assume a pair exists</li>
+          <li>Quote, then swap with slippage bounds</li>
+          <li>Track internal balances, not only wallet balances</li>
+          <li>Leave inventory on the DEX if you want flips to keep working</li>
+          <li>Handle policy reverts and stale-order cleanup</li>
+          <li>Never use the Fee AMM as a trading venue</li>
+        </ol>
+        <aside class="notes">
+          This is the practical close.
+          A correct integration looks boring: quote, bound, account internally, respect policy.
+          Most bugs come from treating this like an ERC-20 AMM pool.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Mental Model</h2>
+        <p style="font-size: 1.12em; margin-top: 0.7em;">
+          A quote-token tree, not a pair matrix.
+        </p>
+        <p style="font-size: 1.12em; margin-top: 0.7em;">
+          A tick-grid CLOB, not an AMM curve.
+        </p>
+        <p style="font-size: 1.12em; margin-top: 0.7em;">
+          Flip orders are standing convertibility, not just “limit orders with extra flags.”
+        </p>
+        <aside class="notes">
+          That is the developer compression of this entire session.
+          Tree, ticks, flips, internal balances, policy.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Next Session</h2>
+        <p style="font-size: 1.15em; margin-top: 1em;">
+          Private Zones
+        </p>
+        <aside class="notes">
+          Next: Tempo Zones as private execution environments attached to mainnet.
+          Deposits, withdrawals, proofs, privacy properties, and how TIP-20 plus TIP-403 still apply inside a zone.
+        </aside>
+      </section>
+
+      <section class="center">
+        <h2>Questions</h2>
+        <p style="color: #888; margin-top: 0.8em; font-size: 0.9em;">
+          Quote graph, flip funding, and policy checks are the usual sharp edges.
+        </p>
+        <aside class="notes">
+          Stay on the sharp edges if discussion starts:
+          why there is only one route,
+          why flips can silently stop,
+          why the DEX address must be policy-authorized,
+          and why Fee AMM is not a trading API.
+        </aside>
+      </section>
+
+    </div>
+  </div>
+
+  <script src="../../../reveal.js/dist/reveal.js"></script>
+  <script src="../../../reveal.js/plugin/notes/notes.js"></script>
+  <script>
+    function initializeReveal(renderMermaidOnCurrentSlide) {
+      Reveal.initialize({
+        hash: true,
+        slideNumber: true,
+        controls: true,
+        progress: true,
+        transition: 'slide',
+        plugins: [ RevealNotes ]
+      }).then(() => {
+        void renderMermaidOnCurrentSlide();
+      });
+
+      Reveal.on('slidechanged', () => {
+        setTimeout(() => {
+          void renderMermaidOnCurrentSlide();
+        }, 40);
+      });
+    }
+
+    function bootstrapWithMermaid() {
+      if (!window.mermaid) return false;
+
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'dark',
+        securityLevel: 'loose',
+        fontFamily: 'inherit'
+      });
+
+      // Cache original Mermaid definitions so re-rendering works when revisiting slides.
+      document.querySelectorAll('.mermaid').forEach((node) => {
+        if (!node.dataset.mermaidSource) {
+          node.dataset.mermaidSource = node.textContent.trim();
+        }
+      });
+
+      let mermaidRenderSeq = 0;
+
+      async function renderMermaidOnCurrentSlide() {
+        const slide = Reveal.getCurrentSlide();
+        if (!slide) return;
+
+        const nodes = Array.from(slide.querySelectorAll('.mermaid'));
+        for (const node of nodes) {
+          const source = (node.dataset.mermaidSource || '').trim();
+          if (!source) continue;
+
+          try {
+            const id = `mermaid-${Date.now()}-${mermaidRenderSeq++}`;
+            const { svg, bindFunctions } = await mermaid.render(id, source);
+            node.innerHTML = svg;
+            if (typeof bindFunctions === 'function') bindFunctions(node);
+          } catch (error) {
+            console.error('Mermaid render failed:', error);
+            node.innerHTML = `<pre style="color:#f88; font-size:0.5em; white-space:pre-wrap;">${source}</pre>`;
+          }
+        }
+      }
+
+      initializeReveal(renderMermaidOnCurrentSlide);
+      return true;
+    }
+
+    let bootstrapAttempts = 0;
+    (function waitForMermaid() {
+      if (bootstrapWithMermaid()) return;
+
+      bootstrapAttempts += 1;
+      if (bootstrapAttempts === 1) loadMermaidFallback();
+
+      if (bootstrapAttempts > 40) {
+        console.error('Mermaid failed to load; starting Reveal without Mermaid rendering.');
+        initializeReveal(async () => {});
+        return;
+      }
+
+      setTimeout(waitForMermaid, 100);
+    })();
+  </script>
+</body>
+</html>
