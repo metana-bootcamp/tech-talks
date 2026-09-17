@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tempo – Private Zones</title>
+
+  <link rel="stylesheet" href="../../../reveal.js/dist/reveal.css">
+  <link rel="stylesheet" href="../../../reveal.js/dist/theme/black.css">
+  <script>
+    function loadMermaidFallback() {
+      if (window.mermaid || document.getElementById('mermaid-fallback-script')) return;
+      const script = document.createElement('script');
+      script.id = 'mermaid-fallback-script';
+      script.src = 'https://unpkg.com/mermaid@10/dist/mermaid.min.js';
+      document.head.appendChild(script);
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" onerror="loadMermaidFallback()"></script>
+
+  <style>
+    .reveal h1, .reveal h2, .reveal h3 { text-transform: none; font-weight: 600; }
+    .reveal .slides section { text-align: left; }
+    .reveal .center { text-align: center; }
+    .reveal .subtitle { color: #aaa; font-size: 0.68em; margin-top: 0.25em; }
+    .reveal .mermaid {
+      display: flex; justify-content: center; background: #111;
+      border-radius: 6px; padding: 8px 12px; margin: 8px 0 4px 0;
+    }
+    .reveal .diagram-caption { text-align: center; color: #777; font-size: 0.46em; margin-top: 4px; }
+    .reveal ul, .reveal ol { font-size: 0.88em; }
+    .reveal code, .reveal pre code {
+      background: #1c1c1c; padding: 2px 6px; border-radius: 4px; font-size: 0.78em;
+    }
+    .reveal pre { font-size: 0.48em; width: 100%; }
+    .reveal table { font-size: 0.68em; margin-top: 0.5em; }
+    .reveal th, .reveal td { border: 1px solid #444; padding: 5px 8px; }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <section>
+        <h1 class="center">Tempo Zones</h1>
+        <p class="center subtitle">Private execution environments attached to Mainnet</p>
+        <aside class="notes">
+          This session is for developers who already understand Tempo Mainnet, TIP-20, and TIP-403.
+          Zones are not “a privacy mixin on the same chain.”
+          They are separate sequenced chains rooted to Mainnet, with locked funds, validity proofs, and a two-layer privacy model.
+        </aside>
+      </section>
+
+      <section>
+        <h2>What You Should Leave With</h2>
+        <ul>
+          <li>What a Zone is architecturally — and what it is not</li>
+          <li>The trust split: sequencer sees activity, proofs bind funds</li>
+          <li>Two-layer privacy: execution + RPC. Why one layer is not enough</li>
+          <li>Deposit, encrypted deposit, withdrawal, and callback flows</li>
+          <li>How TIP-20 and TIP-403 are mirrored, not waived</li>
+          <li>What you can and cannot query from a Zone RPC</li>
+        </ul>
+        <aside class="notes">
+          If someone already knows validiums or private L2s, this should still be worth their time because of the account-scoped RPC, fixed-gas side-channel mitigations, encrypted deposits, and policy mirroring.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Definition</h2>
+        <p style="font-size: 1.1em; margin-top: 0.6em;">
+          A Zone is a dedicated chain with one sequencer,<br>
+          rooted to Tempo Mainnet.
+        </p>
+        <ul>
+          <li>No zone data is published on Mainnet</li>
+          <li>Balances, transfers, and history are invisible to explorers</li>
+          <li>Each Zone has its own execution and throughput</li>
+          <li>Liquidity is shared through Mainnet, not copied as a new token</li>
+        </ul>
+        <aside class="notes">
+          Adding Zones increases throughput without congesting Mainnet payment lanes.
+          Funds that enter a Zone are locked on Mainnet in that Zone’s portal.
+          The Zone is not a wrapped-asset island. It is a private execution environment over the same TIP-20 assets.
+        </aside>
+      </section>
+
+      <section>
+        <h2>What a Zone Is Not</h2>
+        <ul>
+          <li>Not a stealth-address scheme on Mainnet</li>
+          <li>Not a mixer</li>
+          <li>Not “encrypt the calldata and keep the same public state”</li>
+          <li>Not permissionless-private against the sequencer</li>
+        </ul>
+        <aside class="notes">
+          Be explicit about the threat model.
+          Outside observers — explorers, indexers, other users — see nothing.
+          The sequencer sees everything inside the Zone.
+          Funds cannot be stolen or forged because of proofs, but privacy is not sequencer-private.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Architecture</h2>
+        <div class="mermaid">
+          flowchart TB
+            User[User] --> Main[Tempo Mainnet]
+            Main --> Portal[ZonePortal]
+            Portal --> Seq[Zone sequencer]
+            Seq --> Zone[Zone execution]
+            Seq --> Proof[Validity proof / TEE attestation]
+            Proof --> Portal
+        </div>
+        <p class="diagram-caption">Lock on Mainnet. Execute privately. Prove the transition.</p>
+        <aside class="notes">
+          User deposits into the portal.
+          Sequencer observes the deposit queue, executes inside the Zone, and later posts a batch with a proof.
+          The portal is the custody and settlement hinge. The Zone is the private VM.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Canonical Addresses</h2>
+        <table>
+          <thead>
+            <tr><th>Component</th><th>Address</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>ZoneFactory</td><td><code>0x5AF2…0000</code></td></tr>
+            <tr><td>ZonePortal implementation</td><td><code>0x5AD1…0000</code></td></tr>
+            <tr><td>Zone verifier</td><td><code>0x5a56…0000</code></td></tr>
+            <tr><td>ZoneMessenger</td><td><code>0x5A4d…0000</code></td></tr>
+          </tbody>
+        </table>
+        <aside class="notes">
+          T10 made zone creation a native protocol operation.
+          Factory is a precompile. Each zone gets a deterministic portal whose address encodes the zone ID.
+          Do not hand-roll portal address checks in app code. Call ZoneFactory.isZonePortal(address).
+        </aside>
+      </section>
+
+      <section>
+        <h2>Deterministic Identity</h2>
+        <pre><code>chain_id = 421700000 + zone_id
+
+portal ≈ 0x5AD000000000000000000000 || zone_id_be_8_bytes
+zone 1 portal = 0x5AD0000000000000000000000000000000000001</code></pre>
+        <aside class="notes">
+          4217 is Tempo Mainnet’s chain ID, reused as a prefix.
+          Wallets and RPC clients must treat each Zone as its own EIP-155 chain.
+          Mixing Mainnet chain ID 4217 with a zone RPC is a class of footgun you should warn students about immediately.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Zone Predeploys</h2>
+        <ul>
+          <li><strong>TempoState</strong> — the Zone’s view of Mainnet headers so contracts can read Mainnet state inside proofs</li>
+          <li>Inbox / outbox style bridging surfaces</li>
+          <li>Fixed system contracts; contract creation inside a Zone reverts</li>
+        </ul>
+        <aside class="notes">
+          Zones are not general-purpose deployment environments in the current design.
+          That is intentional. Privacy plus arbitrary contract creation would explode the leak and proving surface.
+          Think payments, balances, policy-preserving transfers — not “deploy Uniswap in private.”
+        </aside>
+      </section>
+
+      <section>
+        <h2>Trust Split</h2>
+        <div class="mermaid">
+          flowchart LR
+            Seq[Sequencer] --> See[Sees all zone activity]
+            Proof[Validity proof] --> Funds[Cannot steal or forge state]
+        </div>
+        <p class="diagram-caption">Privacy depends on the operator. Solvency depends on the proof.</p>
+        <aside class="notes">
+          Say this twice if needed.
+          Integrity of funds ≠ privacy from the sequencer.
+          The sequencer orders and executes.
+          The proof says the state transition and queues were correct.
+          If your product promise is “even the operator cannot see this,” Zones as specified today do not give you that.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Proving Model</h2>
+        <ul>
+          <li>Sequencer submits batches via <code>submitBatch</code> on the portal</li>
+          <li>Batch includes block transition, deposit-queue progress, withdrawal-queue hash</li>
+          <li>Same verifier interface for ZK (SP1) and TEE (SGX/TDX)</li>
+          <li>Proof checks state transition, TempoState commitment, and outbox batch index</li>
+        </ul>
+        <aside class="notes">
+          The interesting engineering choice is one state-transition function that can run in a ZKVM or a TEE.
+          App developers rarely generate these proofs themselves.
+          They do need to know settlement is batched and asynchronous, and that withdrawals become claimable only after a proven batch.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Two-Layer Privacy</h2>
+        <div class="mermaid">
+          flowchart TB
+            Q[Who can learn a balance?]
+            Q --> E[Execution layer]
+            Q --> R[RPC layer]
+            E --> E1[balanceOf reverts unless self or sequencer]
+            R --> R1[RPC scoped to authorized account]
+        </div>
+        <p class="diagram-caption">Either layer alone is bypassable.</p>
+        <aside class="notes">
+          This is the sharpest teaching point in the session.
+          Execution alone fails because eth_getStorageAt can read mapping slots.
+          RPC alone fails because eth_call can run a helper contract that reads someone else’s balance and returns it.
+          Both layers exist because each bypasses the other.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Private Balances at Execution</h2>
+        <ul>
+          <li><code>balanceOf(account)</code> succeeds if <code>msg.sender == account</code></li>
+          <li>Succeeds if caller is the sequencer</li>
+          <li>Otherwise reverts <code>Unauthorized()</code></li>
+          <li>Same idea extends to allowances</li>
+        </ul>
+        <aside class="notes">
+          Sequencer access is required for block production and fee accounting.
+          Everyone else, including other zone contracts composing through you, should not be able to learn balances.
+          That changes how you write contracts. Public view functions that assume global readable balances are invalid here.
+        </aside>
+      </section>
+
+      <section>
+        <h2>RPC Is Authenticated and Scoped</h2>
+        <ul>
+          <li>Every request carries <code>X-Authorization-Token</code></li>
+          <li>Token is signed by a Tempo account key (secp256k1, P256, WebAuthn, or access key)</li>
+          <li>Max lifetime: 1 month</li>
+          <li>Binds spec version, zone ID, chain ID, issued-at, expiry</li>
+          <li>Zone 0 in the token can mean “all zones”</li>
+        </ul>
+        <aside class="notes">
+          This is not public Ethereum JSON-RPC with an API key taped on.
+          The token proves control of an account and scopes responses to that account.
+          Replay protection is in the signed payload. Do not mint long-lived god tokens for backends.
+        </aside>
+      </section>
+
+      <section>
+        <h2>What RPC Will and Will Not Give You</h2>
+        <ul>
+          <li>Allowed: chain ID, block number, gas price, headers without txs</li>
+          <li>Headers: transaction bodies omitted, logsBloom zeroed on subscriptions</li>
+          <li>Account-scoped: your deposits, your receipts, your events</li>
+          <li>Filtered out: other users’ activity and most system/config events</li>
+        </ul>
+        <aside class="notes">
+          If you are building an explorer-style UI against a Zone RPC, you will be disappointed and that is the point.
+          You can build a wallet for one account.
+          You cannot build a global mempool viewer.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Deposit: Mainnet → Zone</h2>
+        <div class="mermaid">
+          flowchart TB
+            D[ZonePortal.deposit] --> Lock[Validate token, lock funds, charge fee]
+            Lock --> Q[Append deposit queue]
+            Q --> S[Sequencer advances inbox]
+            S --> Mint[Mint zone-side TIP-20 to recipient]
+            Mint --> P[Batch proof includes queue progress]
+        </div>
+        <p class="diagram-caption">Deposits are queued and proven. They are not a same-block balance update.</p>
+        <aside class="notes">
+          Walk this slowly.
+          deposit(token, to, amount, memo) on Mainnet.
+          Fee is deducted from the deposit amount and paid to the sequencer on Mainnet.
+          FIXED_DEPOSIT_GAS is 100,000. Rate is set on the portal.
+          The zone mint happens later when the sequencer processes the queue.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Encrypted Deposits</h2>
+        <ul>
+          <li>Private on-ramp: Mainnet observers should not learn the zone recipient</li>
+          <li>Invalid encrypted deposits must not halt chain progress</li>
+          <li>Use this when the deposit itself would otherwise leak the destination</li>
+        </ul>
+        <aside class="notes">
+          Standard deposits leak the zone recipient on Mainnet.
+          Encrypted deposits exist so the on-ramp can stay private.
+          Robustness matters: a garbage encrypted payload cannot brick the deposit queue.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Withdrawal: Zone → Mainnet</h2>
+        <ol>
+          <li>User creates a withdrawal request inside the Zone</li>
+          <li>Sequencer finalizes a withdrawal batch at the end of a proven batch</li>
+          <li>Proof commits <code>withdrawalQueueHash</code> and batch index</li>
+          <li>Mainnet later pays out from the portal</li>
+        </ol>
+        <aside class="notes">
+          Two-step by design.
+          Request in the Zone, settle on Mainnet after proof.
+          Withdrawal fee is gasLimit × tempoGasRate in the withdrawn token.
+          Users pick gasLimit high enough to cover processing and any callback.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Composable Withdrawal Callbacks</h2>
+        <div class="mermaid">
+          flowchart LR
+            Z1[Zone A] --> W[Withdraw to Mainnet]
+            W --> Dex[Optional DEX swap]
+            Dex --> Z2[Deposit into Zone B]
+        </div>
+        <p class="diagram-caption">Atomic transfer + callback. If callback reverts, transfer reverts.</p>
+        <aside class="notes">
+          This is how cross-zone value movement stays composable without exposing the trader as a public Mainnet flow they have to babysit.
+          Receiving contracts implement IWithdrawalReceiver and must check msg.sender == zoneMessenger.
+          That authentication check is mandatory. Missing it is an integration bug.
+        </aside>
+      </section>
+
+      <section>
+        <h2>TIP-20 and TIP-403 Still Bind</h2>
+        <ul>
+          <li>Only enabled TIP-20s move into a Zone</li>
+          <li>Issuer policy is mirrored, not stripped</li>
+          <li>Proofs commit that batch execution followed those rules</li>
+          <li>Zone operator enablement and issuer policy are both required</li>
+        </ul>
+        <aside class="notes">
+          Privacy is not a compliance escape hatch.
+          A blacklisted address does not become spendable because the transfer happened “in private.”
+          If you taught TIP-403 earlier, connect it here explicitly so students do not invent a loophole.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Gas Inside a Zone</h2>
+        <ul>
+          <li>Same USD TIP-20 fee-token model</li>
+          <li>No Fee AMM inside the Zone — sequencer accepts enabled tokens directly</li>
+          <li>TIP-20 transfer / approve / memo variants are fixed at 100,000 gas</li>
+          <li>Fixed costs remove gas-based occupancy leaks</li>
+        </ul>
+        <aside class="notes">
+          On public EVM, gas variation on cold vs warm slots can leak whether an address has been used.
+          Zones fix those user-facing TIP-20 ops at 100k so storage occupancy is not a side channel.
+          That is a protocol choice you should name. It is not an implementation accident.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Asynchrony Is the UX Reality</h2>
+        <ul>
+          <li>Deposit, routed send, swap-across-zones, withdraw all settle in stages</li>
+          <li>A Mainnet tx landing is not the same as the zone balance updating</li>
+          <li>Wallets must model pending portal state, not only local nonce</li>
+        </ul>
+        <aside class="notes">
+          Demo this if you can.
+          Students coming from Mainnet TIP-20 transfers expect sub-second finality and immediate balances.
+          Zones keep fast proofs as a goal, but the product surface is still staged.
+          If your UI shows “sent” when only the portal lock landed, you will support tickets forever.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Integration Checklist</h2>
+        <ol>
+          <li>Use the Zone chain ID, not 4217, on the Zone RPC</li>
+          <li>Authenticate RPC with a short-lived account-scoped token</li>
+          <li>Never assume public <code>balanceOf</code> or global logs</li>
+          <li>Treat deposits and withdrawals as queues plus proofs</li>
+          <li>Authenticate callbacks with <code>zoneMessenger</code></li>
+          <li>Keep TIP-403 in the mental model</li>
+          <li>Do not promise sequencer-private confidentiality</li>
+        </ol>
+        <aside class="notes">
+          This is the close for working engineers.
+          Most production bugs will be chain-ID confusion, treating staged settlement as atomic, or leaking via a helper contract / storage read that Mainnet habits make feel normal.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Mental Model</h2>
+        <p style="font-size: 1.12em; margin-top: 0.6em;">
+          Mainnet is the settlement and liquidity plane.
+        </p>
+        <p style="font-size: 1.12em; margin-top: 0.6em;">
+          A Zone is a private execution plane with a trusted-for-privacy sequencer.
+        </p>
+        <p style="font-size: 1.12em; margin-top: 0.6em;">
+          Proofs protect funds. Two layers protect account data from everyone else.
+        </p>
+        <aside class="notes">
+          Compress the whole session into those three sentences.
+          If they can repeat them, they are ready to read the bridging and RPC specs without getting lost.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Next Session</h2>
+        <p style="font-size: 1.15em; margin-top: 1em;">
+          Developer Tooling &amp; Production Patterns
+        </p>
+        <aside class="notes">
+          Next we can cover SDKs, Foundry, Tempo API, TIDX, Wallet CLI, and the patterns that show up once you are actually shipping.
+          After that the series turns to MPP.
+        </aside>
+      </section>
+
+      <section class="center">
+        <h2>Questions</h2>
+        <p style="color: #888; margin-top: 0.8em; font-size: 0.9em;">
+          Trust split, two-layer privacy, and staged settlement are the usual sharp edges.
+        </p>
+        <aside class="notes">
+          Stay on:
+          why RPC auth exists,
+          why balanceOf reverts,
+          why flips/deposits are async,
+          why the sequencer is in the privacy TCB,
+          and why TIP-403 still applies.
+        </aside>
+      </section>
+
+    </div>
+  </div>
+
+  <script src="../../../reveal.js/dist/reveal.js"></script>
+  <script src="../../../reveal.js/plugin/notes/notes.js"></script>
+  <script>
+    function initializeReveal(renderMermaidOnCurrentSlide) {
+      Reveal.initialize({
+        hash: true,
+        slideNumber: true,
+        controls: true,
+        progress: true,
+        transition: 'slide',
+        plugins: [ RevealNotes ]
+      }).then(() => {
+        void renderMermaidOnCurrentSlide();
+      });
+
+      Reveal.on('slidechanged', () => {
+        setTimeout(() => {
+          void renderMermaidOnCurrentSlide();
+        }, 40);
+      });
+    }
+
+    function bootstrapWithMermaid() {
+      if (!window.mermaid) return false;
+
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'dark',
+        securityLevel: 'loose',
+        fontFamily: 'inherit'
+      });
+
+      document.querySelectorAll('.mermaid').forEach((node) => {
+        if (!node.dataset.mermaidSource) {
+          node.dataset.mermaidSource = node.textContent.trim();
+        }
+      });
+
+      let mermaidRenderSeq = 0;
+
+      async function renderMermaidOnCurrentSlide() {
+        const slide = Reveal.getCurrentSlide();
+        if (!slide) return;
+
+        const nodes = Array.from(slide.querySelectorAll('.mermaid'));
+        for (const node of nodes) {
+          const source = (node.dataset.mermaidSource || '').trim();
+          if (!source) continue;
+
+          try {
+            const id = `mermaid-${Date.now()}-${mermaidRenderSeq++}`;
+            const { svg, bindFunctions } = await mermaid.render(id, source);
+            node.innerHTML = svg;
+            if (typeof bindFunctions === 'function') bindFunctions(node);
+          } catch (error) {
+            console.error('Mermaid render failed:', error);
+            node.innerHTML = `<pre style="color:#f88; font-size:0.5em; white-space:pre-wrap;">${source}</pre>`;
+          }
+        }
+      }
+
+      initializeReveal(renderMermaidOnCurrentSlide);
+      return true;
+    }
+
+    let bootstrapAttempts = 0;
+    (function waitForMermaid() {
+      if (bootstrapWithMermaid()) return;
+
+      bootstrapAttempts += 1;
+      if (bootstrapAttempts === 1) loadMermaidFallback();
+
+      if (bootstrapAttempts > 40) {
+        console.error('Mermaid failed to load; starting Reveal without Mermaid rendering.');
+        initializeReveal(async () => {});
+        return;
+      }
+
+      setTimeout(waitForMermaid, 100);
+    })();
+  </script>
+</body>
+</html>

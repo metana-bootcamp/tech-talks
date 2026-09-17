@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tempo – Tooling &amp; Production Patterns</title>
+
+  <link rel="stylesheet" href="../../../reveal.js/dist/reveal.css">
+  <link rel="stylesheet" href="../../../reveal.js/dist/theme/black.css">
+  <script>
+    function loadMermaidFallback() {
+      if (window.mermaid || document.getElementById('mermaid-fallback-script')) return;
+      const script = document.createElement('script');
+      script.id = 'mermaid-fallback-script';
+      script.src = 'https://unpkg.com/mermaid@10/dist/mermaid.min.js';
+      document.head.appendChild(script);
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" onerror="loadMermaidFallback()"></script>
+
+  <style>
+    .reveal h1, .reveal h2, .reveal h3 { text-transform: none; font-weight: 600; }
+    .reveal .slides section { text-align: left; }
+    .reveal .center { text-align: center; }
+    .reveal .subtitle { color: #aaa; font-size: 0.68em; margin-top: 0.25em; }
+    .reveal .mermaid {
+      display: flex; justify-content: center; background: #111;
+      border-radius: 6px; padding: 8px 12px; margin: 8px 0 4px 0;
+    }
+    .reveal .diagram-caption { text-align: center; color: #777; font-size: 0.46em; margin-top: 4px; }
+    .reveal ul, .reveal ol { font-size: 0.88em; }
+    .reveal code, .reveal pre code {
+      background: #1c1c1c; padding: 2px 6px; border-radius: 4px; font-size: 0.78em;
+    }
+    .reveal pre { font-size: 0.48em; width: 100%; }
+    .reveal table { font-size: 0.68em; margin-top: 0.5em; }
+    .reveal th, .reveal td { border: 1px solid #444; padding: 5px 8px; }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <section>
+        <h1 class="center">Tooling &amp; Production Patterns</h1>
+        <p class="center subtitle">How you actually build on Tempo</p>
+        <aside class="notes">
+          Protocol knowledge is not enough to ship.
+          This session maps the surfaces you will actually touch: SDKs, Foundry, RPC, TIDX, Tempo API, CLI, relays, and the failure modes that show up in production.
+        </aside>
+      </section>
+
+      <section>
+        <h2>What You Should Leave With</h2>
+        <ul>
+          <li>Which client to pick for app, contract, agent, and infra work</li>
+          <li>How to send Tempo Transactions from Foundry and SDKs</li>
+          <li>When to use RPC vs TIDX vs Tempo API vs webhooks</li>
+          <li>How fee sponsorship looks in a real backend</li>
+          <li>What breaks if you treat Tempo like plain Ethereum tooling</li>
+        </ul>
+        <aside class="notes">
+          Audience already knows Foundry, viem, and JSON-RPC.
+          The value is the Tempo-specific flags, indexes, and operational patterns — not “here is what an SDK is.”
+        </aside>
+      </section>
+
+      <section>
+        <h2>Tool Map</h2>
+        <div class="mermaid">
+          flowchart TB
+            App[App / Agent] --> SDK[TS / Go / Rust / Python SDK]
+            App --> CLI[tempo wallet / tempo request]
+            Contracts[Contracts] --> Foundry[forge / cast / anvil]
+            Backend[Backend] --> API[Tempo API + webhooks]
+            Backend --> Relay[Fee payer / relay]
+            Read[Reads] --> RPC[JSON-RPC]
+            Read --> TIDX[TIDX SQL indexer]
+        </div>
+        <p class="diagram-caption">Pick the plane that matches the job. Do not force one tool to do all of them.</p>
+        <aside class="notes">
+          A common anti-pattern is using only eth_getLogs for product reads, or using the explorer mental model for agent payments.
+          Split write path, chain read path, product read path, and sponsorship path.
+        </aside>
+      </section>
+
+      <section>
+        <h2>SDKs</h2>
+        <table>
+          <thead>
+            <tr><th>Language</th><th>Base</th><th>Use when</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>TypeScript</td><td>viem / wagmi</td><td>Apps, wallets, agents</td></tr>
+            <tr><td>Rust</td><td>Alloy</td><td>Infra, high-perf clients</td></tr>
+            <tr><td>Go</td><td>tempo-go</td><td>Services, relayers</td></tr>
+            <tr><td>Python</td><td>web3.py / pytempo</td><td>Scripts, research, backends</td></tr>
+          </tbody>
+        </table>
+        <aside class="notes">
+          All of them exist to speak Tempo Transactions: fee token, sponsorship, batching, access keys, 2D nonces.
+          If a library can only send type-2 Ethereum txs, it is incomplete for production Tempo.
+        </aside>
+      </section>
+
+      <section>
+        <h2>TypeScript Is the Default App Path</h2>
+        <ul>
+          <li>viem Tempo actions for transfers, DEX, fees, zones</li>
+          <li>wagmi hooks where you already have a React app</li>
+          <li>Prool for pooled local Tempo nodes in tests</li>
+        </ul>
+        <aside class="notes">
+          For bootcamp and most product teams, start here.
+          The important habit: use the Tempo actions, not a generic sendTransaction that forgets feeToken and then silently falls back to pathUSD assumptions.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Foundry Is First-Class</h2>
+        <pre><code>curl -L https://foundry.paradigm.xyz | bash
+foundryup
+forge init -n tempo my-project</code></pre>
+        <ul>
+          <li>Latest Foundry release includes Tempo support in forge, cast, anvil, chisel</li>
+          <li>Do not stay on an old nightly that only knows type-2 txs</li>
+        </ul>
+        <aside class="notes">
+          Foundry is maintained by the same broader ecosystem that built Reth, which Tempo runs on.
+          Students who already use forge test should keep using it. The new work is flags and precompiles, not a new framework.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Foundry Flags You Will Actually Use</h2>
+        <pre><code>--tempo.fee-token &lt;ADDRESS&gt;
+--tempo.nonce-key &lt;KEY&gt;
+--tempo.expiring-nonce
+--tempo.valid-before &lt;TS&gt;
+--tempo.valid-after &lt;TS&gt;</code></pre>
+        <aside class="notes">
+          fee-token is the one everyone forgets on day one.
+          nonce-key is how you submit parallel txs from one account.
+          valid-before / valid-after are how scheduled / time-bounded Tempo Transactions show up in scripts.
+          Walk one cast erc20 transfer with --tempo.fee-token live if you can.
+        </aside>
+      </section>
+
+      <section>
+        <h2>SignatureVerifier Precompile</h2>
+        <ul>
+          <li>One interface for secp256k1, P256, and WebAuthn</li>
+          <li>You do not deploy your own verifier for passkeys</li>
+          <li>Foundry template includes a relayed-mail example</li>
+        </ul>
+        <aside class="notes">
+          This connects back to Tempo Transactions and access keys.
+          If you are verifying user or agent signatures onchain, start at the precompile instead of copying an OpenZeppelin-only ECDSA helper and then discovering WebAuthn does not fit.
+        </aside>
+      </section>
+
+      <section>
+        <h2>JSON-RPC Is Still There</h2>
+        <ul>
+          <li>Standard <code>eth_*</code> methods work</li>
+          <li>Mainnet RPC: <code>https://rpc.tempo.xyz</code></li>
+          <li>Plus Tempo namespaces for fork schedule and node admin</li>
+          <li>Zone RPCs are a different animal — authenticated and account-scoped</li>
+        </ul>
+        <aside class="notes">
+          Do not tell students “just use the same RPC habits everywhere.”
+          Public Mainnet RPC is Ethereum-shaped.
+          Zone RPC requires X-Authorization-Token and will not give you global logs.
+        </aside>
+      </section>
+
+      <section>
+        <h2>TIDX — Do Not Build a Private Indexer First</h2>
+        <ul>
+          <li>Hosted SQL indexer from Tempo Labs</li>
+          <li>Postgres for point lookups, ClickHouse for analytics</li>
+          <li>Mainnet: <code>https://indexer.tempo.xyz</code></li>
+          <li>Testnet: <code>https://indexer.testnet.tempo.xyz</code></li>
+          <li>Unauthenticated, read-only, CORS-enabled</li>
+        </ul>
+        <aside class="notes">
+          Use TIDX for blocks, txs, logs, holders, decoded events.
+          Running your own tidx is available when you need custom materialized views or stricter SLA.
+          Product teams should not start by writing an eth_getLogs crawler for TIP-20 memos.
+        </aside>
+      </section>
+
+      <section>
+        <h2>RPC vs TIDX vs Tempo API</h2>
+        <table>
+          <thead>
+            <tr><th>Need</th><th>Use</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Submit tx / read latest state</td><td>RPC</td></tr>
+            <tr><td>Historical txs, holders, decoded events</td><td>TIDX</td></tr>
+            <tr><td>Payments product: activity, quotes, sponsorship</td><td>Tempo API</td></tr>
+            <tr><td>Notify your backend of payment events</td><td>Webhooks</td></tr>
+          </tbody>
+        </table>
+        <aside class="notes">
+          This table is the operational core of the talk.
+          If a student indexes payments by polling explorer HTML, stop them.
+          If they use webhooks as the only source of truth with no chain check, also stop them.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Tempo API and Webhooks</h2>
+        <ul>
+          <li>Read payment activity without assembling raw logs yourself</li>
+          <li>Quote funding and exchange routes</li>
+          <li>Fee sponsorship / fee-payer flows</li>
+          <li>Organization webhooks for payment activity</li>
+        </ul>
+        <aside class="notes">
+          Treat API + webhooks as a convenience layer over the protocol, not as a second ledger.
+          Production pattern: webhook wakes the worker, worker verifies against RPC or TIDX, then you credit the user.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Fee Sponsorship in Production</h2>
+        <div class="mermaid">
+          flowchart LR
+            User[User / Agent] --> App[Your app]
+            App --> Relay[Relay / fee payer]
+            Relay --> Chain[Tempo tx with feePayer]
+            User --> Call[Calldata / intent]
+        </div>
+        <p class="diagram-caption">User signs the action. Sponsor pays the fee token.</p>
+        <aside class="notes">
+          Server utilities exist specifically for relay and fee-payer handlers.
+          You need policy on who you sponsor, rate limits, and which fee token the sponsor holds.
+          Blind sponsorship is a drain. Targeted sponsorship is the product.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Tempo CLI</h2>
+        <pre><code>curl -fsSL https://tempo.xyz/install | bash
+tempo wallet
+tempo request
+tempo node
+tempo download</code></pre>
+        <ul>
+          <li><code>wallet</code> — balances, funding, access keys, discovery</li>
+          <li><code>request</code> — curl-like HTTP with MPP negotiation</li>
+          <li><code>node</code> / <code>download</code> — run or snapshot-sync a node</li>
+        </ul>
+        <aside class="notes">
+          For this session, CLI is the operator and agent surface.
+          tempo request is the bridge into MPP, which is the next part of the series.
+          tempo node is for people who need their own RPC, not for class-one “send a payment.”
+        </aside>
+      </section>
+
+      <section>
+        <h2>Wallet CLI for Agents</h2>
+        <ul>
+          <li>Passkey-based Tempo Wallet from the terminal</li>
+          <li>Spend controls and service discovery</li>
+          <li>Designed so an agent can pay without holding a raw key in the prompt</li>
+        </ul>
+        <aside class="notes">
+          Preview the MPP half of the course here without teaching the protocol yet.
+          Agents need a wallet with limits more than they need another SDK method.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Local Testing</h2>
+        <ul>
+          <li>Foundry anvil with Tempo features</li>
+          <li>Prool: pooled Tempo node instances in TypeScript tests</li>
+          <li>Moderato testnet + faucet for integration tests</li>
+        </ul>
+        <aside class="notes">
+          Unit-test contracts locally.
+          Integration-test payments against testnet when you need real TIP-20, DEX, or zone queues.
+          Do not pretend anvil is a full substitute for zone proving or hosted TIDX schemas.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Production Footguns</h2>
+        <ul>
+          <li>Sending type-2 txs and then wondering why fee-token UX is bad</li>
+          <li>Assuming one sequential nonce is enough for agent traffic</li>
+          <li>Indexing only ERC-20 Transfer and missing memos / DEX internal balances</li>
+          <li>Treating Zone RPC like public Mainnet RPC</li>
+          <li>Trusting webhooks without a chain check</li>
+          <li>Sponsoring fees with no budget or allowlist</li>
+        </ul>
+        <aside class="notes">
+          Each of these maps to a previous talk.
+          That is the point of putting tooling after protocol.
+          Students should now hear “internal DEX balance” or “zone auth token” and know why it matters.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Recommended Default Stack</h2>
+        <ol>
+          <li>TypeScript + viem Tempo actions for the product</li>
+          <li>Foundry for contracts and scripts</li>
+          <li>TIDX for historical reads</li>
+          <li>Tempo API + webhooks for payment ops</li>
+          <li>Relay only where you need feeless UX</li>
+          <li>CLI for agents and incident debugging</li>
+        </ol>
+        <aside class="notes">
+          You can swap languages.
+          Do not swap away Tempo Transactions or a real index.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Mental Model</h2>
+        <p style="font-size: 1.12em; margin-top: 0.6em;">
+          Protocol primitives are useless if the client still speaks vanilla Ethereum.
+        </p>
+        <p style="font-size: 1.12em; margin-top: 0.6em;">
+          Use Tempo-aware writes, indexed reads, and explicit sponsorship.
+        </p>
+        <aside class="notes">
+          That is the compression of the session.
+          Next we leave the chain-native half and start MPP: HTTP 402 as a payment protocol for machines.
+        </aside>
+      </section>
+
+      <section>
+        <h2>Next Session</h2>
+        <p style="font-size: 1.15em; margin-top: 1em;">
+          Machine Payments Protocol<br>
+          fundamentals
+        </p>
+        <aside class="notes">
+          MPP is the second half of the series.
+          Tempo remains the reference settlement rail.
+          The new object is the HTTP payment flow: challenge, credential, receipt, charge vs session.
+        </aside>
+      </section>
+
+      <section class="center">
+        <h2>Questions</h2>
+        <p style="color: #888; margin-top: 0.8em; font-size: 0.9em;">
+          Stack choice, TIDX vs RPC, and sponsorship policy are the usual sharp edges.
+        </p>
+        <aside class="notes">
+          Stay on concrete “what do I use for X” questions.
+          If they ask about MPP details, park them for the next session.
+        </aside>
+      </section>
+
+    </div>
+  </div>
+
+  <script src="../../../reveal.js/dist/reveal.js"></script>
+  <script src="../../../reveal.js/plugin/notes/notes.js"></script>
+  <script>
+    function initializeReveal(renderMermaidOnCurrentSlide) {
+      Reveal.initialize({
+        hash: true,
+        slideNumber: true,
+        controls: true,
+        progress: true,
+        transition: 'slide',
+        plugins: [ RevealNotes ]
+      }).then(() => {
+        void renderMermaidOnCurrentSlide();
+      });
+
+      Reveal.on('slidechanged', () => {
+        setTimeout(() => {
+          void renderMermaidOnCurrentSlide();
+        }, 40);
+      });
+    }
+
+    function bootstrapWithMermaid() {
+      if (!window.mermaid) return false;
+
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'dark',
+        securityLevel: 'loose',
+        fontFamily: 'inherit'
+      });
+
+      document.querySelectorAll('.mermaid').forEach((node) => {
+        if (!node.dataset.mermaidSource) {
+          node.dataset.mermaidSource = node.textContent.trim();
+        }
+      });
+
+      let mermaidRenderSeq = 0;
+
+      async function renderMermaidOnCurrentSlide() {
+        const slide = Reveal.getCurrentSlide();
+        if (!slide) return;
+
+        const nodes = Array.from(slide.querySelectorAll('.mermaid'));
+        for (const node of nodes) {
+          const source = (node.dataset.mermaidSource || '').trim();
+          if (!source) continue;
+
+          try {
+            const id = `mermaid-${Date.now()}-${mermaidRenderSeq++}`;
+            const { svg, bindFunctions } = await mermaid.render(id, source);
+            node.innerHTML = svg;
+            if (typeof bindFunctions === 'function') bindFunctions(node);
+          } catch (error) {
+            console.error('Mermaid render failed:', error);
+            node.innerHTML = `<pre style="color:#f88; font-size:0.5em; white-space:pre-wrap;">${source}</pre>`;
+          }
+        }
+      }
+
+      initializeReveal(renderMermaidOnCurrentSlide);
+      return true;
+    }
+
+    let bootstrapAttempts = 0;
+    (function waitForMermaid() {
+      if (bootstrapWithMermaid()) return;
+
+      bootstrapAttempts += 1;
+      if (bootstrapAttempts === 1) loadMermaidFallback();
+
+      if (bootstrapAttempts > 40) {
+        console.error('Mermaid failed to load; starting Reveal without Mermaid rendering.');
+        initializeReveal(async () => {});
+        return;
+      }
+
+      setTimeout(waitForMermaid, 100);
+    })();
+  </script>
+</body>
+</html>
