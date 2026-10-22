@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tempo Hands-On Demo Track</title>
+  <style>
+    :root {
+      color: #171820;
+      background: #f7f7f4;
+      font-family: Georgia, "Times New Roman", serif;
+    }
+
+    body {
+      margin: 0;
+    }
+
+    main {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 48px 24px 72px;
+    }
+
+    h1 {
+      font-size: clamp(2.4rem, 5vw, 5rem);
+      line-height: 0.95;
+      margin: 0 0 18px;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      margin: 40px 0 14px;
+    }
+
+    p {
+      font-size: 1.08rem;
+      line-height: 1.6;
+      max-width: 760px;
+    }
+
+    a {
+      color: #214e8f;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .eyebrow {
+      font-family: "Courier New", monospace;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #6b5c3e;
+      margin-bottom: 14px;
+    }
+
+    .lead {
+      font-size: 1.28rem;
+      color: #383838;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 28px 0 8px;
+    }
+
+    .actions a {
+      border: 1px solid #252525;
+      border-radius: 6px;
+      color: #171820;
+      display: inline-block;
+      font-family: "Courier New", monospace;
+      font-size: 0.92rem;
+      padding: 10px 12px;
+      text-decoration: none;
+    }
+
+    .track {
+      border-top: 1px solid #c8c4b6;
+      margin-top: 26px;
+    }
+
+    .session {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 90px minmax(0, 1fr);
+      border-bottom: 1px solid #d8d5cb;
+      padding: 18px 0;
+    }
+
+    .number {
+      font-family: "Courier New", monospace;
+      color: #7a6c4c;
+    }
+
+    .session h3 {
+      margin: 0 0 5px;
+      font-size: 1.08rem;
+    }
+
+    .session p {
+      margin: 0;
+      font-size: 0.98rem;
+    }
+
+    code {
+      font-family: "Courier New", monospace;
+      font-size: 0.92em;
+    }
+
+    .meta {
+      color: #5d5d5d;
+      font-family: "Courier New", monospace;
+      font-size: 0.86rem;
+      margin-top: 6px;
+    }
+
+    @media (max-width: 640px) {
+      main {
+        padding: 34px 18px 54px;
+      }
+
+      .session {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">Tempo Demo Curriculum</div>
+    <h1>Hands-On Tempo Classes</h1>
+    <p class="lead">A one-hour-per-session teaching track for showing students how Tempo payment primitives become product workflows.</p>
+    <p>Each class has one tutorial README that runs live against Tempo testnet and that students can follow again afterward. Every script creates throwaway accounts, funds them from the testnet faucet, and shows real transactions and real failures. Nothing is simulated, and no wallet or private key is needed.</p>
+
+    <div class="actions">
+      <a href="README.md">Curriculum README</a>
+    </div>
+
+    <h2>Sessions</h2>
+    <section class="track" aria-label="Tempo demo sessions">
+      <article class="session">
+        <div class="number">01</div>
+        <div>
+          <h3><a href="01-transaction-controls/README.md">Transaction Controls</a></h3>
+          <p>Sign payments with <code>validAfter</code> and <code>validBefore</code> and watch the node enforce the window, then compare one sequential nonce, parallel <code>nonceKey</code> lanes, and an expiring nonce whose replay is refused.</p>
+          <div class="meta">payment windows / nonce lanes / expiring nonces</div>
+        </div>
+      </article>
+      <article class="session">
+        <div class="number">02</div>
+        <div>
+          <h3><a href="02-sponsored-payments/README.md">Sponsored Payments</a></h3>
+          <p>Pay through Tempo's public fee payer, then run the app's own relay that sponsors only what its policy allows. The chain itself rejects replays, expired approvals, and an empty sponsor.</p>
+          <div class="meta">fee payer / relay policy</div>
+        </div>
+      </article>
+      <article class="session">
+        <div class="number">03</div>
+        <div>
+          <h3><a href="03-reconciliation/README.md">Payment Reconciliation</a></h3>
+          <p>Send six real payments against one invoice and let a worker read receipts and memo events to decide which one settles it, then find them all through the indexer.</p>
+          <div class="meta">memos / receipts / indexer</div>
+        </div>
+      </article>
+      <article class="session">
+        <div class="number">04</div>
+        <div>
+          <h3><a href="04-access-keys-agents/README.md">Access Keys And Agents</a></h3>
+          <p>Give an agent its own access key with scopes, a budget, and an expiry. Watch the protocol refuse every overreach, then revoke the key and let a session key expire.</p>
+          <div class="meta">access keys / least privilege</div>
+        </div>
+      </article>
+      <article class="session">
+        <div class="number">05</div>
+        <div>
+          <h3><a href="05-batch-payments/README.md">Batch Payments</a></h3>
+          <p>Validate a payroll manifest against chain data, pay it as one Tempo Transaction, and show that an overdrawing batch fails all or nothing.</p>
+          <div class="meta">batch calls / payroll</div>
+        </div>
+      </article>
+      <article class="session">
+        <div class="number">06</div>
+        <div>
+          <h3><a href="06-tip403-policies/README.md">TIP-403 Policies</a></h3>
+          <p>Launch a stablecoin behind a whitelist, then add a treasury receive policy that parks unwanted deposits in ReceivePolicyGuard until the recovery authority releases them.</p>
+          <div class="meta">token policy / receive policy</div>
+        </div>
+      </article>
+      <article class="session">
+        <div class="number">07</div>
+        <div>
+          <h3><a href="07-stablecoin-dex/README.md">Stablecoin DEX</a></h3>
+          <p>Quote, swap with a bound, hit real slippage and no-liquidity reverts, and pay a merchant who wants a different stablecoin in one atomic transaction.</p>
+          <div class="meta">quote tokens / slippage / atomic payment</div>
+        </div>
+      </article>
+      <article class="session">
+        <div class="number">08</div>
+        <div>
+          <h3><a href="08-private-zones/README.md">Private Zones</a></h3>
+          <p>Deposit into Zone A, sign the zone's RPC token with your own key, pay privately, and see exactly what each user can and cannot read.</p>
+          <div class="meta">zone RPC tokens / privacy boundaries</div>
+        </div>
+      </article>
+      <article class="session">
+        <div class="number">09</div>
+        <div>
+          <h3><a href="09-capstone/README.md">Capstone Payment App</a></h3>
+          <p>Combine invoices, sponsorship tied to invoice state, and reconciliation from receipts, and compare the ledger with what actually arrived in the wallet.</p>
+          <div class="meta">payment product architecture</div>
+        </div>
+      </article>
+      <article class="session">
+        <div class="number">10</div>
+        <div>
+          <h3><a href="10-fee-amm/README.md">Fee AMM</a></h3>
+          <p>See which token pays each fee and how the block's proposer is paid through a fixed-price swap, then watch a brand-new stablecoin get refused as a fee token until someone seeds its Fee AMM pool.</p>
+          <div class="meta">fee tokens / fee conversion</div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
