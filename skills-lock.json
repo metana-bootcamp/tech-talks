@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "docs": {
+      "source": "tempoxyz/plugins",
+      "sourceType": "github",
+      "skillPath": "plugins/docs/skills/docs/SKILL.md",
+      "computedHash": "90c053fad8960727cd6ab5afdb71336b8ee50a4172a3ad31741cb2814f484bee"
+    }
+  }
+}
